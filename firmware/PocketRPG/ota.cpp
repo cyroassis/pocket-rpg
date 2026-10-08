@@ -12,6 +12,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <Preferences.h>
 #include <esp_http_client.h>
 #include <esp_https_ota.h>
@@ -33,6 +34,7 @@ static uint32_t savedAt = 0;
 static WebServer* server = nullptr;
 static DNSServer* dns = nullptr;
 static char apName[24];
+#define SETUP_HOST "pocket"   // the setup page answers at http://pocket.local (and 192.168.4.1)
 
 static void say(int state, const char* a, const char* b, int progress) {
   appUpdateStatus(state, a, b, progress);
@@ -73,6 +75,7 @@ static void stopSetup() {
   if (!setupOn) return;
   server->stop(); delete server; server = nullptr;
   dns->stop(); delete dns; dns = nullptr;
+  MDNS.end();
   WiFi.softAPdisconnect(true);
   setupOn = false; savedAt = 0;
 }
@@ -260,6 +263,7 @@ static void startSetup() {
   dns = new DNSServer();
   dns->setErrorReplyCode(DNSReplyCode::NoError);
   dns->start(53, "*", ip);   // every name leads here, so phones open the page by themselves
+  MDNS.begin(SETUP_HOST);    // "pocket.local" also works on phones that ask for .local names separately
   server = new WebServer(80);
   server->on("/", HTTP_GET, handlePage);
   server->on("/save", HTTP_POST, handleSave);

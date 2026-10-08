@@ -1073,9 +1073,9 @@ static void drawUpdate() {
   if (updState == U_SETUP) {
     text(FONT_PX16, "On your phone, join WiFi", cx, 110, C_MUTED);
     text(FONT_PXB24, updL1, cx, 148, C_GOLD);
-    text(FONT_PX16, "A page opens to pick your", cx, 192, C_MUTED);
-    text(FONT_PX16, "network. If not, open", cx, 216, C_MUTED);
-    text(FONT_PXB16, "192.168.4.1", cx, 246, C_INK);
+    text(FONT_PX16, "A page opens. If not, go to", cx, 190, C_MUTED);
+    text(FONT_PXB24, "pocket.local", cx, 226, C_INK);
+    text(FONT_PX16, "or 192.168.4.1", cx, 254, C_DIM);
     button(10, NAV_Y, 348, NAV_H, "Cancel", GHOST, actUpdStop);
     return;
   }
