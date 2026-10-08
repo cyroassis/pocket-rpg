@@ -3,7 +3,7 @@
 An endless pocket RPG for the **Waveshare ESP32-S3-Touch-AMOLED-1.8** (368×448 AMOLED, touch, step sensor).
 Walk to find materials and XP, craft weapons, armor and capes, level up, and trade gear with a friend's board.
 
-**Try it in the browser:** open [`web/pocket-rpg.html`](web/pocket-rpg.html). It runs the same game code as the board (compiled to WebAssembly), and can show two boards side by side to try trading.
+**Try it in the browser:** [cyroassis.github.io/pocket-rpg](https://cyroassis.github.io/pocket-rpg/). It runs the same game code as the board (compiled to WebAssembly), and can show two boards side by side to try trading.
 
 ## The game
 
