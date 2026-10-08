@@ -1,7 +1,7 @@
 // Software update over WiFi (Settings > Update).
 //
-// Check: join a saved WiFi network, read version.json from the latest GitHub release and compare its
-// "version" with FW_VERSION. Install: download PocketRPG_update.bin from the same release into the free
+// Check: join a saved WiFi network, read ota/version.json from the GitHub repository and compare its
+// "version" with FW_VERSION. Install: download ota/PocketRPG_update.bin from the same place into the free
 // app slot, check it, then restart into it. If anything fails on the way, the old version keeps running.
 // If the new version crashes before its first screen, the board goes back to the old one by itself.
 //
@@ -20,7 +20,7 @@
 #include "version.h"
 #include "ota.h"
 
-#define RELEASE_URL "https://github.com/" FW_REPO "/releases/latest/download/"
+#define RELEASE_URL "https://raw.githubusercontent.com/" FW_REPO "/main/ota/"
 static const char* const VERSION_URL = RELEASE_URL "version.json";
 static const char* const BIN_URL = RELEASE_URL "PocketRPG_update.bin";
 

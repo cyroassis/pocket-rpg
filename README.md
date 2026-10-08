@@ -26,6 +26,7 @@ Walk to find materials and XP, craft weapons, armor and capes, level up, and tra
 | `creator/` | The character creator page used to tune the art. |
 | `tests/` | PC programs that draw screens to images, for checking without a board. |
 | `scripts/` | Build and release scripts. |
+| `ota/` | The latest version, which boards download over WiFi. |
 
 ## Building
 
@@ -50,14 +51,14 @@ After changing the art or fonts, run `python3 tools/build_art.py` or `python3 to
 
 On the board, go to **Settings → page 2 → Update**.
 - The first time, tap **WiFi**. The board opens a network called `PocketRPG-XXXX`. Join it from a phone, and a page opens where you pick your WiFi and type its password. The board keeps up to 3 networks.
-- **Check** asks GitHub for the latest release, and **Install** downloads and installs it. If the download fails, the old version keeps running. If a new version crashes on start, the board goes back to the old one.
+- **Check** reads `ota/version.json` in this repository, and **Install** downloads `ota/PocketRPG_update.bin` and installs it. If the download fails, the old version keeps running. If a new version crashes on start, the board goes back to the old one.
 
 To publish a new version:
 1. Raise `FW_VERSION` in `firmware/PocketRPG/version.h`.
 2. Build the firmware.
-3. Run `scripts/release.sh "what changed"`.
+3. Run `scripts/release.sh "what changed"`, then commit and push.
 
-The release has `PocketRPG_update.bin` and `version.json`, and the boards look at `releases/latest`.
+The script copies the program to `ota/` and writes `ota/version.json`. GitHub can take a few minutes to serve the new files.
 
 Note: after a WiFi update the board runs from its second program slot. To flash by USB after that, use the full `0x0` file (it erases the hero).
 
