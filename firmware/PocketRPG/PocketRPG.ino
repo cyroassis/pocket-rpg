@@ -65,7 +65,7 @@ SensorPCF85063 rtc;
 bool imuOk = false, rtcOk = false;
 uint32_t lastActivity = 0;
 uint32_t ambientDrawnAt = 0;
-static const uint8_t AMBIENT_BRIGHTNESS = 40;
+static const uint8_t AMBIENT_BRIGHTNESS = 52;
 // The clock is set from the time this file was compiled when it has never been set. The build machine
 // is on UTC; this is the offset to local time (Central Daylight Time = -5).
 static const int BUILD_TZ_OFFSET_HOURS = -5;
