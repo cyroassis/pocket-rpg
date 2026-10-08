@@ -1,0 +1,6 @@
+build/
+web/pocket.wasm
+tests/*.ppm
+tests/*.png
+tests/a.out
+__pycache__/

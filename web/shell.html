@@ -1,0 +1,113 @@
+<title>Pocket RPG Hero Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: the board screen at true size on the left, the rules and test buttons on the right; stacks on phones.
+   Single dark look on purpose: a night-workshop frame around an AMOLED screen. */
+:root{
+  --bg:#121019; --surface:#1a1724; --line:#2e2840; --ink:#ece8f5; --muted:#a39bb8;
+  --gold:#e9b44c; --edge:#2a2536;
+  --display:"Silkscreen", ui-monospace, monospace;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:24px 48px}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(22px,3.2vw,30px);line-height:1.15;margin:0;color:var(--gold);text-wrap:balance}
+.sub{color:var(--muted);margin:6px 0 22px;max-width:62ch}
+.layout{display:grid;grid-template-columns:minmax(0,404px) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+.device{background:var(--edge);border-radius:30px;padding:12px;max-width:404px;width:100%;margin-inline:auto;box-shadow:0 0 0 1px var(--line) inset}
+.device canvas{display:block;width:100%;aspect-ratio:368/448;border-radius:20px;touch-action:manipulation;cursor:pointer;background:#000}
+.hw{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px}
+.cap{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:13px;margin-top:10px;padding-inline:6px;font-variant-numeric:tabular-nums}
+.side{display:grid;gap:22px;min-width:0}
+.label{font-family:var(--display);font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--gold);margin:0 0 8px}
+.note{color:var(--muted);margin:0;max-width:62ch}
+.note b{color:var(--ink)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:400;font-size:13px;white-space:nowrap}
+.scroll{overflow-x:auto}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.btn{font:inherit;font-weight:700;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:8px 14px;cursor:pointer}
+.btn:hover{border-color:var(--gold)}
+.btn.hw-key{font-family:var(--display);font-weight:400;font-size:13px;letter-spacing:.5px}
+button:focus-visible,canvas:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.loading{color:var(--muted);text-align:center;padding:8px}
+.boards{display:flex;flex-wrap:wrap;gap:24px;min-width:0}
+.board{flex:1 1 300px;max-width:404px;min-width:0}
+.bname{font-family:var(--display);font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin:0 0 8px;text-align:center}
+.layout.two{grid-template-columns:minmax(0,1fr)}
+.layout.two .boards{justify-content:center}
+</style>
+
+<div class="wrap">
+  <h1>Pocket RPG</h1>
+  <p class="sub">This screen runs the board's own code, compiled for the browser: the same hero setup, home, Craft, Explore, Bag, Trade and Settings, drawn at the real 368×448 size. Tap it like the board's touch screen. Your hero and progress stay in this browser.</p>
+  <div class="layout" id="layout">
+    <div class="boards" id="boards">
+      <section class="board" data-board="0">
+        <p class="bname">Board 1</p>
+        <div class="device"><canvas width="368" height="448" tabindex="0" aria-label="Board 1 screen. Tap to use."></canvas></div>
+        <p class="loading">Loading the board…</p>
+        <div class="hw">
+          <button class="btn hw-key" type="button" data-act="boot">BOOT · Settings</button>
+          <button class="btn hw-key" type="button" data-act="pwr">PWR · Screen</button>
+        </div>
+        <div class="hw">
+          <button class="btn" type="button" data-act="walk200">Walk 200 steps</button>
+          <button class="btn" type="button" data-act="walk2000">Walk 2,000</button>
+          <button class="btn" type="button" data-act="nextDay">Next day</button>
+        </div>
+        <p class="cap"><span data-out="steps"></span><span data-out="state" aria-live="polite"></span></p>
+      </section>
+    </div>
+    <section class="side">
+      <div>
+        <p class="label">How the game works</p>
+        <div class="scroll"><table>
+          <tbody>
+            <tr><th>Walking</th><td>Every 200 steps: 5 XP and 1 material. Materials stop at 20 a day; XP never stops. About 1 find in 50 is an item instead (tier 1 to 3, any kind).</td></tr>
+            <tr><th>Craft</th><td>5 to 50 materials, in steps of 5. Every 5 is one roll and the best roll wins, so 50 materials give 10× the luck. 2 XP per 5 materials.</td></tr>
+            <tr><th>Rarity</th><td>20 tiers. Each tier is 1.6× rarer than the one before. Tier 20 is about 1 in 7,600 with 5 materials.</td></tr>
+            <tr><th>Equip</th><td>A tier N item needs level N. You can craft and keep anything.</td></tr>
+            <tr><th>Levels</th><td>100, 125, 150, 200, 250, 325, 400, 500, 650, 800 XP, then the same ×10 every 10 levels, with no top level.</td></tr>
+            <tr><th>Bag</th><td>20 slots. Salvage gives back 2 materials for every 5 used.</td></tr>
+            <tr><th>Trade</th><td>Two boards side by side. A 60 s window: each hero puts 0 to 3 items on the table and approves. Any change removes the approvals. When both approve, the items swap.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div>
+        <p class="label">Professions</p>
+        <div class="scroll"><table>
+          <thead><tr><th>Profession</th><th>Crafts</th><th>Gets the rest from</th></tr></thead>
+          <tbody>
+            <tr><td>Blacksmith</td><td>Weapons (sword, axe, mace)</td><td>Walking finds, trading</td></tr>
+            <tr><td>Armorer</td><td>Armor</td><td>Walking finds, trading</td></tr>
+            <tr><td>Tailor</td><td>Capes</td><td>Walking finds, trading</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div>
+        <p class="label">On the board</p>
+        <p class="note">Tap the hero on the home screen to see the gear being worn. <b>PWR</b> switches to the always-on view (name, steps and footprints) and back. <b>BOOT</b> opens Settings. After the idle time the screen dims to the always-on view, or turns off if that is disabled in Settings. Touch is off on the always-on view; BOOT or PWR bring the normal screen back.</p>
+      </div>
+      <div>
+        <p class="label">Trading</p>
+        <p class="note">Add a second board to try a trade: it has its own hero and bag, and the two boards talk over a pretend radio, like two real boards side by side. On both, open <b>Bag</b> and tap <b>Trade</b>.</p>
+        <div class="row" style="margin-top:10px"><button class="btn" type="button" id="second">Add a second board</button></div>
+      </div>
+      <div class="row"><button class="btn" type="button" id="reset">Delete this browser's heroes</button><span id="resetAsk" class="note" hidden>Tap again to delete the heroes, the bags and the steps.</span></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function(){
+const WASM="__WASM__";
+__JS__
+})();
+</script>

@@ -1,0 +1,628 @@
+<title>Pocket RPG Character Creator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: the board screen at true 368x448 on the left, wardrobe and art drop-in on the right; stacks on phones */
+:root{
+  --bg:#f2f3ef; --surface:#ffffff; --ink:#1c2321; --muted:#5b6762; --line:#d8dcd5;
+  --accent:#b8680c; --accent-soft:#f6e6cf; --warn:#a23b1e;
+  --screen-edge:#2c2836; --screen-ink:#e9e4f2;
+  --display:"Silkscreen", ui-monospace, monospace;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#111513; --surface:#191e1b; --ink:#e5eae6; --muted:#97a39d; --line:#2b332f;
+  --accent:#f0a540; --accent-soft:#3a2a14; --warn:#f08a70;
+  --screen-edge:#2c2836; --screen-ink:#e9e4f2; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#111513; --surface:#191e1b; --ink:#e5eae6; --muted:#97a39d; --line:#2b332f;
+  --accent:#f0a540; --accent-soft:#3a2a14; --warn:#f08a70;
+  --screen-edge:#2c2836; --screen-ink:#e9e4f2; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:24px 48px}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(22px,3.4vw,32px);line-height:1.1;margin:0;letter-spacing:.5px;text-wrap:balance}
+.sub{color:var(--muted);margin:6px 0 20px;max-width:66ch}
+.layout{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:880px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.label{font-family:var(--display);font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+.stage{display:grid;gap:12px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+@media (max-width:880px){.stage{position:static}}
+.device{background:var(--screen-edge);border-radius:28px;padding:10px;max-width:388px;margin-inline:auto;width:100%}
+.device canvas{display:block;width:100%;aspect-ratio:368/448;border-radius:20px;image-rendering:pixelated}
+.cap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.note{color:var(--muted);font-size:13px;margin:0}
+.controls{display:grid;gap:18px}
+.group h2{font-size:14px;margin:0 0 8px;font-weight:700;display:flex;justify-content:space-between;gap:8px}
+.group h2 span{font-weight:400;color:var(--muted);font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.opt{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer}
+.opt[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);font-weight:700}
+.opt.empty{border-style:dashed;color:var(--muted);cursor:default}
+.sw{width:32px;height:32px;border-radius:8px;border:2px solid var(--line);cursor:pointer;padding:0}
+.sw[aria-pressed=true]{border-color:var(--ink);box-shadow:0 0 0 2px var(--surface) inset}
+.sub{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin-top:8px}
+.sublabel{font-size:13px;color:var(--muted)}
+.tier{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;margin-top:8px}
+.tier input{width:100%;accent-color:var(--accent)}
+.tier output{font-family:var(--mono);font-size:13px;min-width:13ch;text-align:right}
+.chip{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px;outline:1px solid var(--line)}
+.sep{border:0;border-top:1px solid var(--line);margin:0}
+button:focus-visible,input:focus-visible,select:focus-visible,label.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.btn{font:inherit;font-weight:700;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--surface);padding:8px 14px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.lower{display:grid;gap:20px;margin-top:20px}
+.drop{display:grid;place-items:center;gap:6px;border:2px dashed var(--line);border-radius:10px;padding:22px 16px;text-align:center;cursor:pointer;color:var(--muted)}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop b{color:var(--ink)}
+.drop input{position:absolute;width:1px;height:1px;opacity:0}
+.log{font-family:var(--mono);font-size:12px;margin:10px 0 0;padding:0;list-style:none;display:grid;gap:4px}
+.log li.bad{color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted)}
+td code{font-family:var(--mono);font-size:12px}
+.scroll{overflow-x:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.stat{border-top:1px solid var(--line);padding-top:8px}
+.stat b{display:block;font-family:var(--mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat small{color:var(--muted);font-size:13px}
+textarea{width:100%;min-height:200px;font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;resize:vertical}
+.toast{font-size:13px;color:var(--muted);align-self:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <h1>Pocket RPG Character Creator</h1>
+  <p class="sub">Every layer is the full 368×448 screen, character at 90% with room for hair, capes and weapons. Five hairstyles each for the boy and the girl, all four armors in both cuts, the four capes, the four swords, axes and maces are your files; both bodies are your 368×448 files. Shading is recolored smoothly, so soft gradients survive every skin, eye and rarity color. Drop your own PNGs below to test each piece as you finish it.</p>
+
+  <div class="layout">
+    <section class="panel stage">
+      <div class="device"><canvas id="screen" width="368" height="448" aria-label="Character on the board screen"></canvas></div>
+      <div class="cap"><span>ESP32-S3 AMOLED · 368×448</span><span>layers 368×448 (1:1)</span></div>
+      <div class="row"><button class="btn" type="button" id="random">Randomize</button><button class="btn ghost" type="button" id="anim" aria-pressed="false">Animation off</button></div>
+    </section>
+
+    <section class="panel controls" id="controls">
+      <div class="group"><h2>Body</h2><div class="row" id="g-body"></div></div>
+      <div class="group"><h2>Skin tone</h2><div class="row" id="g-skin"></div></div>
+      <div class="group"><h2>Eye color</h2><div class="row" id="g-eye"></div></div>
+      <div class="group"><h2>Hairstyle <span id="hairCount"></span></h2><div class="row" id="g-hair"></div></div>
+      <div class="group"><h2>Hair color</h2><div class="row" id="g-hairColor"></div></div>
+      <hr class="sep">
+      <div class="group"><h2>Armor <span id="armorMat"></span></h2><div class="row" id="g-armor"></div>
+        <div class="tier"><label for="armorTier">Rarity</label><input type="range" id="armorTier" min="1" max="20" value="3"><output id="armorTierOut"></output></div></div>
+      <div class="group"><h2>Cape <span id="capeMat"></span></h2><div class="row" id="g-cape"></div>
+        <div class="tier"><label for="capeTier">Rarity</label><input type="range" id="capeTier" min="1" max="20" value="10"><output id="capeTierOut"></output></div></div>
+      <div class="group"><h2>Weapon <span id="weaponMat"></span></h2><div class="row" id="g-weapon"></div>
+        <div class="sub"><span class="sublabel">Material</span><div class="row" id="g-weaponMat"></div></div>
+        <div class="tier"><label for="weaponTier">Rarity</label><input type="range" id="weaponTier" min="1" max="20" value="8"><output id="weaponTierOut"></output></div>
+        <div class="row" style="margin-top:8px" id="g-element"></div></div>
+    </section>
+  </div>
+
+  <div class="lower">
+    <section class="panel">
+      <p class="label">Test your art</p>
+      <label class="drop" id="drop"><input type="file" id="file" accept="image/png" multiple><b>Drop PNGs here or click to choose</b><span>368×448 with transparent background. Older 288×432 files and raw 1024×1536 ChatGPT images (magenta background) are placed automatically like the 90% bodies.</span></label>
+      <ul class="log" id="log"></ul>
+      <div class="scroll" style="margin-top:14px"><table>
+        <thead><tr><th>File name</th><th>Goes to</th><th>How to paint it</th></tr></thead>
+        <tbody>
+          <tr><td><code>body_male.png</code>, <code>body_female.png</code></td><td>Base body</td><td>Skin in the 4 skin tones; iris and tank top/shorts in gray. Transparent background</td></tr>
+          <tr><td><code>hair_NAME_front.png</code>, <code>hair_NAME_back.png</code></td><td>Hairstyle NAME (boy); add <code>_female</code> before <code>_front</code> for a girl style</td><td>Hair in 4 grays; back part only for long styles</td></tr>
+          <tr><td><code>armor_NAME.png</code></td><td>Armor</td><td>Main material in 4 grays; trim that takes the rarity color in 4 tones of pure green</td></tr>
+          <tr><td><code>cape_NAME_back.png</code>, <code>cape_NAME_front.png</code></td><td>Cape NAME</td><td>Fabric in 4 grays (gets the rarity color); clasp in 4 tones of pure green</td></tr>
+          <tr><td><code>weapon_MATERIAL_NAME.png</code></td><td>Weapon NAME in wood, bronze, iron or titanium (e.g. <code>weapon_bronze_sword.png</code>)</td><td>Material in gray; mark the gem socket as a solid pure-white circle; the hand in skin tones</td></tr>
+          <tr><td><code>gem_fire.png</code>, <code>gem_nature.png</code>, <code>gem_water.png</code>, <code>gem_neutral.png</code></td><td>Element gems</td><td>Any size, square, transparent background; scaled to each weapon's socket</td></tr>
+        </tbody>
+      </table></div>
+      <p class="note" style="margin-top:10px">Soft edges and partial transparency are kept (16 opacity levels), so soft brushes, glows and semi-transparent capes work. Outline stays #1A1420. "Pure green" means shades like #A0FFA0, #00E000, #009000, #004800, so the board can tell trim apart from the main material. Files you add stay only until you reload the page.</p>
+    </section>
+
+    <section class="panel">
+      <p class="label">Memory on the board</p>
+      <div class="stats" id="stats"></div>
+    </section>
+
+    <section class="panel">
+      <p class="label">Export for the ESP32</p>
+      <p class="note" style="margin-bottom:10px">C header with every loaded layer (368×448, run-length encoded: group, opacity, and the shade or fixed color) and all color ramps in RGB565. Large: generating takes a few seconds.</p>
+      <div class="row" style="margin-bottom:10px"><button class="btn" type="button" id="gen">Generate C header</button><button class="btn ghost" type="button" id="copy">Copy</button><span class="toast" id="toast"></span></div>
+      <textarea id="code" readonly aria-label="C header" placeholder="Press Generate C header"></textarea>
+    </section>
+  </div>
+</div>
+
+<script>
+(function(){
+const W=368,H=448,SCALE=1,SW=368,SH=448;
+// Older 288x432 (and 96x144) art is placed the way the bodies were moved to this canvas:
+// padded bottom-center to 368x448, then scaled to 90% around the feet.
+const LEGACY={x:54.4,y:58.4,w:259.2,h:388.8};
+const PRE=__DATA__;
+const OUTLINE="#1A1420";
+// ---------- colors ----------
+// Skin tones: "Light" keeps the artist's original colors exactly; the others shift every skin pixel
+// from the body's own base tone to the target base, in linear light, so shading and blush survive.
+const SKINS=[["Fair","#FFDCC4"],["Light",null],["Medium","#E2A774"],["Tan","#C2875A"],["Brown","#93603C"],["Deep","#5E3A24"]];
+const DEFAULT_SKIN_BASE=0xF2C39B;
+const toLin=new Float32Array(256).map((_,i)=>{const c=i/255;return c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4)});
+const fromLin=new Uint8Array(4096).map((_,i)=>{const c=i/4095;return Math.round(255*(c<=0.0031308?c*12.92:1.055*Math.pow(c,1/2.4)-0.055))});
+// OKLab: a color space where equal steps look equally different, so shifting a color keeps the
+// artist's shading intact. Used for skin, hair, eyes, capes and rarity trim.
+function toOk(c){const r=toLin[c[0]],g=toLin[c[1]],b=toLin[c[2]];
+  const l=Math.cbrt(0.4122214708*r+0.5363325363*g+0.0514459929*b),m=Math.cbrt(0.2119034982*r+0.6806995451*g+0.1073969566*b),s=Math.cbrt(0.0883024619*r+0.2817188376*g+0.6299787005*b);
+  return [0.2104542553*l+0.7936177850*m-0.0040720468*s,1.9779984951*l-2.4285922050*m+0.4505937099*s,0.0259040371*l+0.7827717662*m-0.8086757660*s]}
+function fromOk(L,a,b){const l=(L+0.3963377774*a+0.2158037573*b)**3,m=(L-0.1055613458*a-0.0638541728*b)**3,s=(L-0.0894841775*a-1.2914855480*b)**3;
+  const lin=[4.0767416621*l-3.3077115913*m+0.2309699292*s,-1.2684380046*l+2.6097574011*m-0.3413193965*s,-0.0041960863*l-0.7034186147*m+1.7076147010*s];
+  return lin.map(v=>fromLin[Math.round(Math.max(0,Math.min(1,v))*4095)])}
+// Move a lightness difference d away from the target lightness t, compressing only near black/white.
+function softL(t,d){const room=d>=0?1-t:t;return room<=0?t:t+room*Math.tanh(d/room)}
+// Skin: every pixel moves by the difference between the body's base tone and the chosen tone.
+function skinShift(base,target){const b=toOk([base>>16,(base>>8)&255,base&255]),t=toOk(rgb(target));return {L:t[0],dL:t[0]-b[0],bL:b[0],da:t[1]-b[1],db:t[2]-b[2],key:target+base}}
+const skinCache=new Map();
+function mapSkin(f,sh){const c=[f>>16,(f>>8)&255,f&255];if(!sh)return c;
+  const key=sh.key+"|"+f;let o=skinCache.get(key);if(o)return o;
+  const k=toOk(c),L=softL(sh.L,k[0]-sh.bL);o=fromOk(L,k[1]+sh.da,k[2]+sh.db);
+  if(skinCache.size>60000)skinCache.clear();skinCache.set(key,o);return o}
+const skinBaseOf=L=>(L&&L.skinBase)||DEFAULT_SKIN_BASE;
+const swatchHex=i=>SKINS[i][1]||"#"+skinBaseOf(store.body[look.body]).toString(16).padStart(6,"0");
+const HAIRC=[["Brown","#5C4433"],["Blonde","#E8C15A"],["Ginger","#C2512B"],["Black","#2A2A34"],["Silver","#D6D6E2"],["Violet","#6B4FD0"],["Teal","#2AA198"],["Pink","#E46AA0"],["Red","#B81E28"]];
+const EYEC=[["Blue","#3B7DD8"],["Green","#3F9A3A"],["Brown","#6B3F20"],["Dark gray","#34343C"],["Light gray","#9AA0AA"],["Purple","#8A3FD0"],["Golden","#D8A020"],["Orange","#E8701E"],["Red","#C8242C"]];
+const RAR=[["Common","#9AA0A6"],["Uncommon","#E8EAED"],["Fine","#4CAF50"],["Refined","#2E7D32"],["Rare","#1E88E5"],["Superior","#64B5F6"],["Epic","#8E24AA"],["Heroic","#D81B60"],["Mystic","#F48FB1"],["Legendary","#FB8C00"],["Mythic","#E53935"],["Ancient","#A1683A"],["Celestial","#26C6DA"],["Astral","#3949AB"],["Divine","#FBC02D"],["Eternal","#FFD54F"],["Primordial","#00A86B"],["Cosmic","#5E35B1"],["Infinite","rainbow"],["Absolute","prism"]];
+// One armor color per rarity tier. Each band (5 tiers) shares a drawing, so colors only need to differ inside a band.
+// null = not chosen yet: falls back to the band's material color, slightly lighter each tier.
+const ARMOR_TIERS=[["Brown","#6E4428"],["Reddish brown","#7A3524"],["Yellowish brown","#9C6A2A"],["Beige","#C2A880"],["Ice white","#C4D2DC"],
+  ["Gray","#8C96A0","asDrawn"],["Copper","#9C532E"],["Silver","#C2C8D0","asDrawn",24],["Gold","#B48428"],["Grayish emerald","#5E8A78"],
+  ["Gray","#5F6B78","asDrawn",0],["Copper","#B8662A","asDrawn",4],["Silver","#C2C8D0","asDrawn",24],["Gold","#E8B020","asDrawn",10],["Grayish emerald","#3E8A70","asDrawn",4],
+  ["Bronze","#B8662A","asDrawn",-20],["Silver","#C2C8D0","asDrawn",4],["Gold","#E8B020","asDrawn",0],["Aqua","#38C4C4","asDrawn",-2],["Abyss teal","#0C4848","asDrawn",-74]];
+// "asDrawn" keeps the artist's brightness and only adds the color's hue (the band's default look).
+const ARMOR_MAT=[["Leather","#6E4428"],["Chainmail","#8C96A0"],["Iron","#5F6B78"],["Titanium","#C4CED8"]];
+const WEAPON_MAT=[["Wood","#9A6A3A"],["Bronze","#B0773A"],["Iron","#5F6B78"],["Titanium","#C4CED8"]];
+const CAPE_BAND=["Traveler","Ranger","Knight","Royal"];   // cape drawing per tier band (1-5, 6-10, 11-15, 16-20)
+const CLASP_MAT=[["Leather","#8A5A34"],["Bronze","#B0773A"],["Iron","#5F6B78"],["Titanium","#C4CED8"]];
+const ELEMENTS=[["Neutral",null],["Fire","#FF5A3A"],["Nature","#5AD05A"],["Water","#3AA8FF"]];
+const UNDER=["#E0E0E0","#A8A8A8","#707070","#404040"];
+
+function hexToHsl(hex){let r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2;
+  if(mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h*=60}
+  return [h,s*100,l*100]}
+function hslToHex(h,s,l){h=((h%360)+360)%360;s=Math.max(0,Math.min(100,s))/100;l=Math.max(0,Math.min(100,l))/100;
+  const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  return "#"+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,"0")).join("")}
+// light, base, shadow, deep. Shadows lean cooler, highlights warmer.
+function ramp(hex,lift=0){const [h,s,l0]=hexToHsl(hex),l=l0+lift;
+  return [hslToHex(h+6,s-4,Math.min(95,l+16)),hslToHex(h,s,l),hslToHex(h-8,s+4,l-16),hslToHex(h-14,s+6,l-30)]}
+let clock=0;
+function tierColor(t){const c=RAR[t-1][1];
+  if(c==="rainbow")return hslToHex(clock*0.12,85,55);
+  if(c==="prism")return hslToHex(clock*0.2,60,78);
+  if(t===16)return hslToHex(46,100,62+Math.sin(clock/300)*10);
+  if(t===17)return hslToHex(156,100,33+Math.sin(clock/350)*8);
+  if(t===18)return hslToHex(255+Math.sin(clock/500)*25,55,45);
+  return c}
+const band=t=>Math.floor((t-1)/5);
+
+// ---------- layers ----------
+// Each layer keeps, per pixel: group (0 clear, 1 fixed color, 2 skin, 3 group A, 4 group B, 5 gem),
+// shade 0..255 (light..deep, used by groups 2-4), opacity 0..15, and the original color for group 1.
+const N=W*H;
+function emptyLayer(){return {g:new Uint8Array(N),s:new Uint8Array(N),a:new Uint8Array(N),f:new Uint32Array(N),partial:false,mid:{3:128,4:128}}}
+function fromSlots(rows){const L=emptyLayer(),rw=rows[0].length,rh=rows.length;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const sx=Math.floor((x-LEGACY.x)/LEGACY.w*rw),sy=Math.floor((y-LEGACY.y)/LEGACY.h*rh);if(sx<0||sy<0||sx>=rw||sy>=rh)continue;const v=parseInt(rows[sy][sx],16),k=y*W+x;if(!v)continue;L.a[k]=15;
+    if(v===1){L.g[k]=1;L.f[k]=parseInt(OUTLINE.slice(1),16)}
+    else if(v<=5){L.g[k]=2;L.s[k]=(v-2)*85;L.f[k]=[0xFBDCC0,0xF2C39B,0xD99C72,0xB87A52][v-2]}
+    else if(v<=9){L.g[k]=3;L.s[k]=255-(v-6)*85}
+    else if(v<=13){L.g[k]=4;L.s[k]=255-(v-10)*85}
+    else if(v===14){L.g[k]=5}
+    else{L.g[k]=1;L.f[k]=0xA8503A}}
+  return L}
+const store={body:{male:fromSlots(PRE.body.male),female:fromSlots(PRE.body.female)},hair:{},armor:{"Placeholder outfit":fromSlots(PRE.demo)},cape:{},weapon:{}};
+let look={body:"male",skin:1,eye:0,hair:null,hairColor:0,armor:null,armorTier:3,cape:null,capeTier:10,weapon:null,weaponTier:8,element:1};
+const $=id=>document.getElementById(id);
+const rgbCache={};
+function rgb(hex){return rgbCache[hex]||(rgbCache[hex]=[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)])}
+// Ramps (light..deep) for skin, group A and group B of one layer kind, plus the gem color.
+function palette(kind){
+  let A=UNDER,B=UNDER,gem="#FFFFFF",tintA=null;
+  if(kind==="body"){A=ramp(EYEC[look.eye][1]);B=UNDER}
+  else if(kind==="hair"){A=ramp(HAIRC[look.hairColor][1]);B=A}
+  else if(kind==="armor"){const t=look.armorTier,tc=ARMOR_TIERS[t-1];if(tc&&tc[2]==="asDrawn")tintA={hex:tc[1],lift:tc[3]||0};else if(tc)A=[tc[1],tc[1]];else tintA={hex:ARMOR_MAT[band(t)][1],lift:((t-1)%5-2)*1.5};B=ramp(tierColor(t))}
+  else if(kind==="cape"){const t=look.capeTier;A=ramp(tierColor(t));B=ramp(CLASP_MAT[band(t)][1])}
+  else if(kind==="weapon"){const t=look.weaponTier,tc=ARMOR_TIERS[t-1];   // same metal color per tier as the armor
+    if(tc&&tc[2]==="asDrawn")tintA={hex:tc[1],lift:tc[3]||0};else if(tc)A=[tc[1],tc[1]];else tintA={hex:WEAPON_MAT[band(t)][1],lift:((t-1)%5-2)*1.5};B=ramp(tierColor(t));const e=ELEMENTS[look.element][1];if(e)gem=e}
+  const target=SKINS[look.skin][1];
+  return {skin:target?skinShift(skinBaseOf(store.body[look.body]),target):null,3:A[1],4:B[1],tint3:tintA,gem:rgb(gem)};
+}
+// Gradient map: each gray pixel keeps its brightness. The layer's middle gray becomes the chosen color,
+// darker grays slide toward a deep shade of it (outlines stay dark), lighter grays toward a highlight.
+const lutCache=new Map();
+// Tint for gear materials: every pixel keeps the brightness the artist painted (so shadows, highlights and
+// edges stay exactly as drawn); the material only adds its hue and saturation, fading toward the extremes.
+function tintLUT(baseHex,lift){const key="t"+baseHex+"|"+lift;let lut=lutCache.get(key);if(lut)return lut;
+  const [h,sat]=hexToHsl(baseHex);lut=[];
+  for(let v=0;v<256;v++){const l0=v/255*100,l=Math.max(0,Math.min(100,lift>=0?l0+lift*(1-l0/100):l0+lift*(l0/100))),edge=Math.abs(l-50)/50;
+    const ss=sat*(1-0.55*edge*edge),hh=h+(l<50?-6:5)*edge;
+    // match perceived brightness: correct HSL lightness so the tinted pixel has the same luminance as the gray
+    let c=rgb(hslToHex(hh,ss,l));const y=0.299*c[0]+0.587*c[1]+0.114*c[2],target=l/100*255;
+    if(y>0.5){const f=target/y;c=c.map(x=>Math.max(0,Math.min(255,x*f)))}
+    lut.push(c)}
+  lutCache.set(key,lut);return lut}
+function gradLUT(baseHex,mid){const key=baseHex+"|"+mid;let lut=lutCache.get(key);if(lut)return lut;
+  // The layer's middle gray lands on the chosen color; every other gray keeps its distance from it
+  // (in perceived lightness), compressed only where it would run past black or white.
+  const t=toOk(rgb(baseHex)),Lm=Math.cbrt(toLin[Math.max(1,mid)]);lut=[];
+  // Going much darker (black hair) tones the drawn highlights down a little, going much lighter (platinum)
+  // tones the shadows down a little: partial compression, so most of the contrast survives.
+  const up=Math.pow(Math.min(1,t[0]/Math.max(1e-3,Lm)),0.75),down=Math.pow(Math.min(1,(1-t[0])/Math.max(1e-3,1-Lm)),0.75);
+  for(let v=0;v<256;v++){const Ls=Math.cbrt(toLin[v]),d0=Ls-Lm,L=softL(t[0],d0>0?d0*up:d0*down);
+    const room=L>=t[0]?1-t[0]:t[0],fade=room>0?1-0.65*Math.pow(Math.abs(L-t[0])/room,1.5):1;
+    lut.push(fromOk(L,t[1]*fade,t[2]*fade))}
+  if(lutCache.size>400)lutCache.clear();lutCache.set(key,lut);return lut}
+// Armor art per body: "<Material> female" is used for the girl when it exists, otherwise the shared drawing.
+const isBodyVariant=n=>/ female$/i.test(n);
+// Hairstyles are split by body: the boy picks from the boy styles, the girl from the girl styles.
+const HAIR_F=new Set(PRE.hairF||[]);
+const hairFits=n=>HAIR_F.has(n)===(look.body==="female");
+function fitHair(){const n=Object.keys(store.hair).filter(hairFits);if(look.hair&&hairFits(look.hair))return;
+  const pref=look.body==="female"?"Ponytail":"Spiky";look.hair=n.includes(pref)?pref:(n[0]||null)}
+function armorLayer(){if(!look.armor)return null;
+  if(look.body==="female"){const k=Object.keys(store.armor).find(n=>n.toLowerCase()===(look.armor+" female").toLowerCase());if(k)return store.armor[k]}
+  return store.armor[look.armor]||null}
+function stack(){
+  const L=[];const h=look.hair&&store.hair[look.hair],c=look.cape&&store.cape[look.cape];
+  if(c&&c.back)L.push(["cape",c.back,"cape"]);
+  if(h&&h.back)L.push(["hair",h.back,"hairBack"]);
+  L.push(["body",store.body[look.body],"body"]);
+  const arm=armorLayer();if(arm)L.push(["armor",arm,"armor"]);
+  if(c&&c.front)L.push(["cape",c.front,"cape"]);
+  if(h&&h.front)L.push(["hair",h.front,"hairFront"]);
+  if(look.weapon&&store.weapon[look.weapon])L.push(["weapon",store.weapon[look.weapon],"weapon"]);
+  return L;
+}
+// compose to 368x448 premultiplied RGBA floats, blending each layer "over" the ones below
+function compose(frame,list=stack()){
+  const R=new Float32Array(N),G=new Float32Array(N),B=new Float32Array(N),A=new Float32Array(N);
+  const breathe=frame%2===1,waist=Math.round(H*0.57),lift=2,sway=2,hideHand=!!(look.weapon&&store.weapon[look.weapon]);
+  const bodyL=store.body[look.body],wpn=hideHand?store.weapon[look.weapon]:null;
+  const handCut=wpn&&wpn.handTop<H?Math.min(bodyL&&bodyL.hand?bodyL.hand.wrist:H,wpn.handTop+6):(bodyL&&bodyL.hand?bodyL.hand.wrist:H);
+  for(const [kind,L,role] of list){
+    const P=palette(kind);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const k=y*W+x,grp=L.g[k];if(!grp)continue;
+      if(hideHand&&role==="body"&&L.hand&&L.hand.mask[k]&&y>=handCut)continue;   // the weapon brings its own hand
+      const al=L.a[k]/15;if(al<=0)continue;
+      let dx=x,dy=y;
+      if(breathe&&y<waist)dy=y+lift;
+      if(role==="cape"&&frame%4>=2&&y>H*0.49)dx=x+(y>H*0.76?sway:Math.round(sway/2));
+      if(dx>=W||dy>=H)continue;
+      let c;if(grp===1){const f=L.f[k];c=[f>>16,(f>>8)&255,f&255]}else if(grp===2)c=mapSkin(L.f[k],P.skin);else if(grp===5)c=SOCKET;else if(grp===3&&P.tint3)c=tintLUT(P.tint3.hex,P.tint3.lift)[L.s[k]];else c=gradLUT(P[grp],L.mid[grp])[L.s[k]];
+      const o=dy*W+dx,inv=1-al;
+      R[o]=c[0]*al+R[o]*inv;G[o]=c[1]*al+G[o]*inv;B[o]=c[2]*al+B[o]*inv;A[o]=al+A[o]*inv;
+    }
+    // element gem, scaled to the socket and centered on it
+    if(role==="weapon"&&L.socket){const gp=gemPixels(look.element,L.socket.d);
+      if(gp){const sz=L.socket.d,gx=Math.round(L.socket.cx+0.5-sz/2),gy=Math.round(L.socket.cy+0.5-sz/2)+(breathe&&L.socket.cy<waist?lift:0);
+        for(let j=0;j<sz;j++)for(let i=0;i<sz;i++){const q=(j*sz+i)*4,al=gp[q+3]/255;if(al<=0)continue;const x=gx+i,y=gy+j;if(x<0||y<0||x>=W||y>=H)continue;
+          const o=y*W+x,inv=1-al;R[o]=gp[q]*al+R[o]*inv;G[o]=gp[q+1]*al+G[o]*inv;B[o]=gp[q+2]*al+B[o]*inv;A[o]=al+A[o]*inv}}}
+  }
+  return {R,G,B,A};
+}
+// Element gems: one image per element, scaled once per socket size and cached.
+const SOCKET=[26,20,32],GEM_KEYS=["neutral","fire","nature","water"],gemImg={},gemCache=new Map();
+function gemPixels(el,size){const img=gemImg[GEM_KEYS[el]];if(!img)return null;const key=el+"|"+size;let p=gemCache.get(key);if(p)return p;
+  const c=document.createElement("canvas");c.width=size;c.height=size;const g=c.getContext("2d");g.imageSmoothingEnabled=true;g.imageSmoothingQuality="high";
+  g.drawImage(img,0,0,size,size);p=g.getImageData(0,0,size,size).data;gemCache.set(key,p);return p}
+const off=document.createElement("canvas");off.width=W;off.height=H;const octx=off.getContext("2d");const oimg=octx.createImageData(W,H);
+const sil=document.createElement("canvas");sil.width=W;sil.height=H;const sctx=sil.getContext("2d");const simg=sctx.createImageData(W,H);
+const ctx=$("screen").getContext("2d");
+// Only the top two tiers (19 Infinite, 20 Absolute) glow and shed particles.
+const GLOW_FROM=19;
+let frame=0,plan=[],planKey="";
+function draw(){
+  clock=performance.now();
+  ctx.fillStyle="#0e0d13";ctx.fillRect(0,0,SW,SH);
+  // floor glow
+  const g=ctx.createRadialGradient(SW/2,SH-28,4,SW/2,SH-28,140);g.addColorStop(0,"rgba(120,110,160,0.35)");g.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=g;ctx.fillRect(0,0,SW,SH);
+  const ox=(SW-W*SCALE)/2,oy=(SH-H*SCALE)/2;
+  // Layers are drawn in groups. Right before an item of GLOW_FROM+ (armor, cape, weapon), its own glow is
+  // drawn, so the light comes from that item only and sits over the layers beneath it (skin, clothes).
+  const tierOf=role=>role==="armor"&&look.armor?look.armorTier:role==="cape"&&look.cape?look.capeTier:role==="weapon"&&look.weapon?look.weaponTier:0;
+  // The layer groups and glow shapes only change when the look changes; rebuild them then, and just
+  // redraw the cached pieces (with the pulsing glow) on other frames.
+  const animated=[look.armor&&look.armorTier,look.cape&&look.capeTier,look.weapon&&look.weaponTier].some(t=>t>=16);
+  const key=JSON.stringify(look)+"|"+frame+"|"+Object.keys(store.hair).length+Object.keys(store.armor).length+Object.keys(store.weapon).length+Object.keys(store.body).length+(animated?Math.floor(clock/60):"");
+  if(key!==planKey){planKey=key;plan=[];
+    const toCanvas=(px,asSil,col)=>{const c=document.createElement("canvas");c.width=W;c.height=H;const g=c.getContext("2d"),im=g.createImageData(W,H),d=im.data,A=px.A;
+      const cc=asSil?rgb(col.length===7?col:"#ffffff"):null;let x0=W,x1=0,y0=H,y1=0;
+      for(let k=0;k<N;k++){const a=A[k],j=k*4;
+        if(asSil){const on=a>0.4;d[j]=cc[0];d[j+1]=cc[1];d[j+2]=cc[2];d[j+3]=on?255:0;if(on){const x=k%W,y=(k/W)|0;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}}
+        else if(a>0){d[j]=px.R[k]/a;d[j+1]=px.G[k]/a;d[j+2]=px.B[k]/a;d[j+3]=a*255}}
+      g.putImageData(im,0,0);return {c,box:[x0,x1,y0,y1]}};
+    let group=[];const flush=()=>{if(group.length)plan.push({img:toCanvas(compose(frame,group)).c});group=[]};
+    for(const item of stack()){const t=tierOf(item[2]);
+      if(t>=GLOW_FROM){flush();const sh=toCanvas(compose(frame,[item]),true,tierColor(t));if(sh.box[1]>=sh.box[0])plan.push({glow:sh.c,box:sh.box,tier:t})}
+      group.push(item)}
+    flush()}
+  for(const op of plan){
+    if(op.img){ctx.drawImage(op.img,ox,oy);continue}
+    const pulse=0.45+0.25*Math.sin(clock/280),col=tierColor(op.tier),[x0,x1,y0,y1]=op.box;
+    ctx.save();ctx.globalAlpha=pulse;ctx.filter="blur(6px)";ctx.drawImage(op.glow,ox,oy);ctx.drawImage(op.glow,ox,oy);ctx.filter="blur(2px)";ctx.drawImage(op.glow,ox,oy);ctx.restore();
+    if(op.tier>=GLOW_FROM){for(let i=0;i<8;i++){const t=(clock/1400+i*0.37)%1,sx=ox+x0+((i*37)%Math.max(1,x1-x0)),sy=oy+y1-(y1-y0+20)*t;
+      ctx.globalAlpha=Math.sin(t*Math.PI);ctx.fillStyle=op.tier>=19?hslToHex(i*36+clock*0.1,90,70):col;ctx.beginPath();ctx.arc(sx,sy,2.5,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1}
+  }
+}
+let animOn=false; // off by default until real animation frames exist
+$("anim").setAttribute("aria-pressed",String(animOn));$("anim").textContent=animOn?"Animation on":"Animation off";
+let last=0;
+function loop(t){ if(animOn&&t-last>650){frame++;last=t} draw(); requestAnimationFrame(loop) }
+
+// ---------- controls ----------
+function pressed(el,on){el.setAttribute("aria-pressed",String(on))}
+function buildControls(){
+  $("g-body").innerHTML=[["Boy","male"],["Girl","female"]].map(([n,v])=>`<button type="button" class="opt" data-k="body" data-v="${v}">${n}</button>`).join("");
+  $("g-skin").innerHTML=SKINS.map((s,i)=>`<button type="button" class="sw" data-k="skin" data-v="${i}" style="background:${swatchHex(i)}" title="${s[0]}${i===1?" (original art)":""}" aria-label="${s[0]} skin"></button>`).join("");
+  $("g-eye").innerHTML=EYEC.map((s,i)=>`<button type="button" class="sw" data-k="eye" data-v="${i}" style="background:${s[1]}" title="${s[0]}" aria-label="${s[0]} eyes"></button>`).join("");
+  $("g-hairColor").innerHTML=HAIRC.map((s,i)=>`<button type="button" class="sw" data-k="hairColor" data-v="${i}" style="background:${s[1]}" title="${s[0]}" aria-label="${s[0]} hair"></button>`).join("");
+  $("g-weaponMat").innerHTML=WEAPON_MAT.map((m,i)=>`<button type="button" class="opt" data-k="weaponMat" data-v="${i}"><span class="chip" style="background:${m[1]}"></span>${m[0]}</button>`).join("");
+  $("g-element").innerHTML=ELEMENTS.map((e,i)=>`<button type="button" class="opt" data-k="element" data-v="${i}">${e[1]?`<span class="chip" style="background:${e[1]}"></span>`:""}${e[0]}</button>`).join("");
+  for(const k of ["hair","armor","cape","weapon"])buildSlot(k);
+}
+// Weapons come in the four materials: files weapon_<material>_<kind>.png ("Bronze Sword"). The Weapon row picks
+// the kind, the Material row picks the drawing (and moves the rarity into that material's tiers).
+const kindOf=n=>n?n.replace(/^(wood|bronze|iron|titanium) /i,""):null;
+function resolveWeapon(kind){
+  if(!kind){look.weapon=null;return}
+  const keys=Object.keys(store.weapon),want=`${WEAPON_MAT[band(look.weaponTier)][0]} ${kind}`.toLowerCase();
+  look.weapon=keys.find(n=>n.toLowerCase()===want)||keys.find(n=>n.toLowerCase()===kind.toLowerCase())||keys.find(n=>kindOf(n).toLowerCase()===kind.toLowerCase())||null;
+}
+function buildSlot(k){
+  let names=Object.keys(store[k]).filter(n=>!isBodyVariant(n)&&(k!=="hair"||hairFits(n)));
+  if(k==="weapon")names=[...new Set(names.map(kindOf))];
+  const none=`<button type="button" class="opt" data-k="${k}" data-v="">None</button>`;
+  $("g-"+k).innerHTML=none+names.map(n=>`<button type="button" class="opt" data-k="${k}" data-v="${n}">${n}</button>`).join("")+(names.length?"":`<span class="opt empty">Drop ${k} PNGs below</span>`);
+  if(k==="hair")$("hairCount").textContent=names.length?`${names.length} loaded`:"waiting for art";
+}
+function sync(){
+  document.querySelectorAll("#controls [data-k]").forEach(b=>{const k=b.dataset.k,v=b.dataset.v;
+    const cur=k==="weapon"?kindOf(look.weapon):k==="weaponMat"?band(look.weaponTier):look[k];pressed(b,String(cur===null?"":cur)===v)});
+  const ls=document.querySelector('[data-k="skin"][data-v="1"]');if(ls)ls.style.background=swatchHex(1);
+  for(const [k,mats] of [["armor",ARMOR_MAT],["cape",CLASP_MAT],["weapon",WEAPON_MAT]]){
+    const t=look[k+"Tier"];$(k+"Tier").value=t;
+    const c=RAR[t-1][1],sw=c==="rainbow"||c==="prism"?"conic-gradient(red,yellow,lime,cyan,blue,magenta,red)":c;
+    $(k+"TierOut").innerHTML=`<span class="chip" style="background:${sw}"></span>${t}. ${RAR[t-1][0]}`;
+    const label=k==="cape"?`${CAPE_BAND[band(t)]} cape`:(k==="armor"||k==="weapon")&&ARMOR_TIERS[t-1]?`${mats[band(t)][0]} · ${ARMOR_TIERS[t-1][0]}`:mats[band(t)][0];
+    $(k+"Mat").textContent=look[k]?label:"";
+  }
+}
+$("controls").addEventListener("click",e=>{const b=e.target.closest("button[data-k]");if(!b)return;
+  const k=b.dataset.k,v=b.dataset.v;if(k!=="weapon"&&k!=="weaponMat")look[k]=["skin","eye","hairColor","element"].includes(k)?+v:(v===""?null:v);
+  if(k==="body"){fitHair();buildSlot("hair")}
+  if(k==="weapon")resolveWeapon(v||null);
+  if(k==="weaponMat"){if(band(look.weaponTier)!==+v)look.weaponTier=+v*5+1;resolveWeapon(kindOf(look.weapon))}
+  if(k==="cape"&&v){const m=CAPE_BAND.findIndex(x=>x.toLowerCase()===v.toLowerCase());if(m>=0&&band(look.capeTier)!==m)look.capeTier=m*5+1}
+  if(k==="armor"&&v){const m=ARMOR_MAT.findIndex(x=>x[0].toLowerCase()===v.toLowerCase());if(m>=0&&band(look.armorTier)!==m)look.armorTier=m*5+1}
+  sync()});
+for(const k of ["armor","cape","weapon"])$(k+"Tier").addEventListener("input",e=>{look[k+"Tier"]=+e.target.value;
+  if(k==="weapon"&&look.weapon)resolveWeapon(kindOf(look.weapon));
+  if(k==="cape"&&look.cape){const want=Object.keys(store.cape).find(n=>n.toLowerCase()===CAPE_BAND[band(look.capeTier)].toLowerCase());if(want)look.cape=want}
+  if(k==="armor"&&look.armor){const want=Object.keys(store.armor).find(n=>!isBodyVariant(n)&&n.toLowerCase()===ARMOR_MAT[band(look.armorTier)][0].toLowerCase());if(want)look.armor=want}
+  sync()});
+$("anim").addEventListener("click",()=>{animOn=!animOn;pressed($("anim"),animOn);$("anim").textContent=animOn?"Animation on":"Animation off"});
+$("random").addEventListener("click",()=>{const r=n=>Math.floor(Math.random()*n),pick=o=>{const k=Object.keys(o).filter(n=>!isBodyVariant(n));return k.length?k[r(k.length)]:null};
+  look={...look,body:r(2)?"male":"female",skin:r(SKINS.length),eye:r(EYEC.length),hairColor:r(HAIRC.length),hair:pick(store.hair),armor:pick(store.armor),cape:pick(store.cape),weapon:pick(store.weapon),armorTier:1+r(20),capeTier:1+r(20),weaponTier:1+r(20),element:r(4)};
+  if(look.weapon)resolveWeapon(kindOf(look.weapon));
+  const hs=Object.keys(store.hair).filter(hairFits);look.hair=hs.length?hs[r(hs.length)]:null;buildSlot("hair");sync()});
+
+// ---------- importing PNGs ----------
+// Any 2:3 image is scaled to 288x432. Magenta backgrounds (raw ChatGPT renders) become transparent first.
+function toCells(img){
+  const w=img.width,h=img.height,src=document.createElement("canvas");src.width=w;src.height=h;
+  const sg=src.getContext("2d");sg.drawImage(img,0,0);
+  const sd=sg.getImageData(0,0,w,h);const d=sd.data;let keyed=0;
+  for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];if(d[i+3]>0&&r>170&&g<110&&b>170&&Math.abs(r-b)<90){d[i+3]=0;keyed++}}
+  if(keyed)sg.putImageData(sd,0,0);
+  const c=document.createElement("canvas");c.width=W;c.height=H;const g=c.getContext("2d");
+  const native=w===W&&h===H,legacy=!native&&Math.abs(w/h-2/3)<0.02;
+  g.imageSmoothingEnabled=!(w<=96);g.imageSmoothingQuality="high";
+  if(native)g.drawImage(src,0,0);else if(legacy)g.drawImage(src,LEGACY.x,LEGACY.y,LEGACY.w,LEGACY.h);else g.drawImage(src,0,0,W,H);
+  const o=g.getImageData(0,0,W,H).data,cells=[];
+  for(let i=0;i<W*H;i++)cells.push([o[i*4],o[i*4+1],o[i*4+2],o[i*4+3]]);
+  // Edge bleed: semi-transparent edge pixels take the color of the nearest solid pixel, so a white (or any)
+  // background that the export blended into the soft edges doesn't show up as a light halo.
+  const fixed=cells.map(c=>c.slice());
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,a=cells[i][3];if(a<=8||a>=200)continue;
+    let best=-1,bd=99;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const yy=y+dy,xx=x+dx;if(yy<0||xx<0||yy>=H||xx>=W)continue;
+      const j=yy*W+xx;if(cells[j][3]>=200){const dd=dx*dx+dy*dy;if(dd<bd){bd=dd;best=j}}}
+    if(best>=0){fixed[i][0]=cells[best][0];fixed[i][1]=cells[best][1];fixed[i][2]=cells[best][2]}}
+  return {cells:fixed,cw:W,ch:H,native:true,from:[w,h],keyed:keyed>0,legacy};
+}
+// Weapons: the gem socket is the round pure-white spot (filled, about as wide as tall). Other white pixels
+// (shine on the blade) go back to the metal so they take the material color. Same rule as tools/build_art.py.
+function keepSocket(k,cw,ch){
+  const seen=new Uint8Array(k.length);let best=-1,bestPts=null;
+  for(let i=0;i<k.length;i++){if(k[i]!==5||seen[i])continue;
+    const q=[i],pts=[];seen[i]=1;
+    while(q.length){const c=q.pop();pts.push(c);const x=c%cw,y=(c/cw)|0;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=cw||yy>=ch)continue;const j=yy*cw+xx;if(k[j]===5&&!seen[j]){seen[j]=1;q.push(j)}}}
+    let x0=1e9,x1=-1,y0=1e9,y1=-1;for(const c of pts){const x=c%cw,y=(c/cw)|0;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}
+    const w=x1-x0+1,h=y1-y0+1,round=pts.length/(w*h)>=0.55&&Math.max(w,h)<=1.4*Math.min(w,h);
+    if(round&&pts.length>best){best=pts.length;bestPts=pts}}
+  for(let i=0;i<k.length;i++)if(k[i]===5)k[i]=3;
+  if(bestPts)for(const c of bestPts)k[c]=5;
+}
+// Weapons: the hand is the biggest patch of skin; stray skin-colored pixels go back to the metal.
+function keepHand(k,cw,ch){
+  const seen=new Uint8Array(k.length);let best=[];
+  for(let i=0;i<k.length;i++){if(k[i]!==2||seen[i])continue;
+    const q=[i],pts=[];seen[i]=1;
+    while(q.length){const c=q.pop();pts.push(c);const x=c%cw,y=(c/cw)|0;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=cw||yy>=ch)continue;const j=yy*cw+xx;if(k[j]===2&&!seen[j]){seen[j]=1;q.push(j)}}}
+    if(pts.length>best.length)best=pts}
+  for(let i=0;i<k.length;i++)if(k[i]===2)k[i]=3;
+  for(const c of best)k[c]=2;
+}
+function classify({cells,cw,ch,native},kind){
+  const k=new Array(cw*ch).fill(0),lum=cells.map(c=>0.299*c[0]+0.587*c[1]+0.114*c[2]);
+  const headRows=Math.floor(ch*0.41);
+  cells.forEach((c,i)=>{const [r,g,b,a]=c,mx=Math.max(r,g,b),mn=Math.min(r,g,b),y=Math.floor(i/cw);
+    if(a<9||(!native&&a<128)||(!native&&r>170&&g<110&&b>170&&Math.abs(r-b)<90))k[i]=0;
+    else if(kind==="body"&&lum[i]<62)k[i]=1;
+    else if(mn>228)k[i]=(kind==="body"||kind==="weapon")?5:3;   // near-white is the eye white / gem only on bodies and weapons; elsewhere it is a highlight
+    else if(g>r+40&&g>b+40)k[i]=4;               // pure green key = group B
+    else if(mx-mn<22)k[i]=(kind==="body"&&y>=headRows)?4:3;
+    else if((kind==="body"||kind==="weapon")&&r>g&&g>=b-10&&r-b>25)k[i]=2;   // skin: bodies, and the hand drawn on weapons; brown straps on armor stay as drawn
+    else if(kind==="armor"&&r>170&&g>110&&r-b>40&&r>g&&g>=b-10)k[i]=2;   // bare skin showing through armor (light skin tones only, so brown straps stay as drawn)
+    else k[i]=kind==="hair"?3:6});   // hair has a single material: stray tinted edge pixels join it
+  if(kind==="weapon"){keepSocket(k,cw,ch);keepHand(k,cw,ch)}
+  // shade: position inside each group's own light..dark range (2nd to 98th percentile)
+  const range={},val=cells.map((c,i)=>(c[1]>c[0]+40&&c[1]>c[2]+40)?c[1]:lum[i]);   // green-keyed trim: brightness of the green
+  for(const kk of [2,3,4]){const v=[];k.forEach((g,i)=>{if(g===kk)v.push(kk===2?lum[i]:val[i])});if(!v.length)continue;v.sort((a,b)=>a-b);
+    range[kk]=[v[Math.floor(v.length*0.02)],v[Math.min(v.length-1,Math.floor(v.length*0.98))],v[v.length>>1]]}
+  const L=emptyLayer(),oy=Math.floor((H-ch)/2),ox=Math.floor((W-cw)/2);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const sy=y-oy,sx=x-ox;if(sy<0||sy>=ch||sx<0||sx>=cw)continue;
+    const i=sy*cw+sx,kk=k[i];if(!kk)continue;
+    const d=y*W+x,c=cells[i],al=Math.max(1,Math.round((native?c[3]:255)/17));
+    L.a[d]=al;if(al<15)L.partial=true;
+    if(kk===1||kk===6||(kk===5&&kind!=="weapon")){L.g[d]=1;L.f[d]=(c[0]<<16)|(c[1]<<8)|c[2]}
+    else if(kk===5){L.g[d]=5}
+    else if(kk===2){L.g[d]=2;L.f[d]=(c[0]<<16)|(c[1]<<8)|c[2]}
+    else{L.g[d]=kk;L.s[d]=Math.round(Math.max(0,Math.min(255,val[i])));L.mid[kk]=Math.round(range[kk][2])}
+  }
+  if(kind==="body")L.hand=findHand(L);
+  if(kind==="weapon"){L.handTop=H;for(let d=0;d<N;d++)if(L.g[d]===2){L.handTop=Math.floor(d/W);break}
+    let n=0,sx=0,sy=0;for(let d=0;d<N;d++)if(L.g[d]===5){n++;sx+=d%W;sy+=Math.floor(d/W)}
+    if(n>4){
+      // the whole round hole, not just its white highlight: grow over light pixels up to the dark outline (max 22 px),
+      // same rule as tools/build_art.py; the gem is drawn 1 px wider than the hole
+      const c0x=Math.round(sx/n),c0y=Math.round(sy/n),at=(x,y)=>{const u=x-ox,v=y-oy;return u<0||v<0||u>=cw||v>=ch?-1:v*cw+u};
+      const seen=new Set([c0y*W+c0x]),q=[[c0x,c0y]];let m=0,mx=0,my=0;
+      while(q.length){const [x,y]=q.pop();m++;mx+=x;my+=y;
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy,key=yy*W+xx;if(Math.abs(xx-c0x)>22||Math.abs(yy-c0y)>22||seen.has(key))continue;
+          const i=at(xx,yy);if(i<0)continue;const c=cells[i];if((native?c[3]:255)>128&&lum[i]>110){seen.add(key);q.push([xx,yy])}}}
+      L.socket={cx:mx/m,cy:my/m,d:Math.max(8,Math.round(2*Math.sqrt(m/Math.PI))+1)}}}
+  const sk=[];for(let d=0;d<N;d++)if(L.g[d]===2&&L.a[d]>=14)sk.push(L.f[d]);
+  if(sk.length>50){const ch=s=>sk.map(f=>(f>>s)&255).sort((a,b)=>a-b)[sk.length>>1];L.skinBase=(ch(16)<<16)|(ch(8)<<8)|ch(0)}
+  return L;
+}
+// The weapon arm: on the image's left side the arm is a separate shape from the torso below the shoulder.
+// Find the wrist (narrowest row above the palm) and mark the lower forearm, wrist and hand. While a weapon
+// is held, the part of that shape from the top of the weapon's own drawn hand down is hidden.
+// Hide slivers of leg showing past the armor's edge: body pixels below the hands that sit within 3 px of the
+// armor take the nearest armor pixel, so the outline closes over them.
+function sealArmor(L,B){if(!B)return;
+  for(let y=296;y<H;y++)for(let x=0;x<W;x++){const k=y*W+x;
+    if(!B.g[k]||(L.g[k]&&L.a[k]>=8))continue;if(y<345&&(x<135||x>233))continue;
+    let best=-1,bd=99;for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const d=dx*dx+dy*dy,yy=y+dy,xx=x+dx;if(d>9||d>=bd||yy<0||xx<0||yy>=H||xx>=W)continue;const j=yy*W+xx;if(L.g[j]&&L.a[j]>=8){bd=d;best=j}}
+    if(best>=0){L.g[k]=L.g[best];L.f[k]=L.f[best];L.s[k]=L.s[best];L.a[k]=15}}}
+function findHand(L){
+  const filled=(x,y)=>L.g[y*W+x]!==0;
+  const firstRun=y=>{let x=0;while(x<W/2&&!filled(x,y))x++;if(x>=W/2)return null;let e=x;while(e<W/2&&filled(e,y))e++;return [x,e-1]};
+  let palm=-1,widest=0,wrist=-1,best=1e9;
+  for(let y=Math.round(H*0.62);y<Math.round(H*0.8);y++){const r=firstRun(y);if(!r)continue;const w=r[1]-r[0]+1;if(w>widest){widest=w;palm=y}}
+  for(let y=Math.round(H*0.58);y<palm;y++){const r=firstRun(y);if(!r)continue;const w=r[1]-r[0]+1;if(w<=best){best=w;wrist=y}}
+  const mask=new Uint8Array(N);if(wrist<0)return {mask,wrist:H};
+  const top=Math.max(0,wrist-50);let right=0;
+  for(let y=top;y<=wrist;y++){const r=firstRun(y);if(r&&r[1]>right)right=r[1]}
+  const seed=firstRun(wrist);if(!seed)return {mask,wrist};
+  const stack=[[Math.round((seed[0]+seed[1])/2),wrist]];
+  while(stack.length){const [x,y]=stack.pop();if(x<0||y<top||x>right+3||y>=H)continue;const k=y*W+x;if(mask[k]||!filled(x,y))continue;
+    mask[k]=1;stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1])}
+  return {mask,wrist}}
+function route(name){
+  const n=name.toLowerCase().replace(/\.png$/,"");
+  let m;
+  if(m=n.match(/^body_(male|female)/))return {kind:"body",key:m[1]};
+  if(m=n.match(/^hair_(.+?)_(front|back)$/))return {kind:"hair",key:m[1],part:m[2]};
+  if(m=n.match(/^hair_(.+)$/))return {kind:"hair",key:m[1],part:"front"};
+  if(m=n.match(/^cape_(.+?)_(front|back)$/))return {kind:"cape",key:m[1],part:m[2]};
+  if(m=n.match(/^cape_(.+)$/))return {kind:"cape",key:m[1],part:"back"};
+  if(m=n.match(/^armor_(.+)$/))return {kind:"armor",key:m[1]};
+  if(m=n.match(/^weapon_(.+)$/))return {kind:"weapon",key:m[1]};
+  if(m=n.match(/^gem_(neutral|fire|nature|water)/))return {kind:"gem",key:m[1]};
+  return null;
+}
+const pretty=s=>s.replace(/[_-]+/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+function log(msg,bad){const li=document.createElement("li");li.textContent=msg;if(bad)li.className="bad";$("log").prepend(li)}
+async function addFiles(files){
+  for(const f of files){
+    const r=route(f.name);
+    if(!r){log(`${f.name}: name not recognized. Use body_, hair_, armor_, cape_, weapon_ or gem_ at the start.`,true);continue}
+    try{
+      const url=URL.createObjectURL(f),img=new Image();
+      await new Promise((ok,err)=>{img.onload=ok;img.onerror=err;img.src=url});
+      if(r.kind==="gem"){gemImg[r.key]=img;gemCache.clear();planKey="";log(`${f.name} → ${r.key} gem`);continue}
+      const layer=classify(toCells(img),r.kind);URL.revokeObjectURL(url);const soft=layer.partial;
+      const key=pretty(r.key);
+      if(r.kind==="body"){store.body[r.key]=layer;look.body=r.key}
+      else if(r.kind==="hair"&&/ female$/i.test(key)){const k2=key.replace(/ female$/i,"");HAIR_F.add(k2);store.hair[k2]=store.hair[k2]||{};store.hair[k2][r.part]=layer;look.body="female";look.hair=k2;buildSlot("hair")}
+      else if(r.kind==="hair"||r.kind==="cape"){store[r.kind][key]=store[r.kind][key]||{};store[r.kind][key][r.part]=layer;look[r.kind]=key;buildSlot(r.kind)}
+      else{if(r.kind==="armor")sealArmor(layer,store.body[/ female$/i.test(key)?"female":"male"]);store[r.kind][key]=layer;if(!/ female$/i.test(key))look[r.kind]=key;buildSlot(r.kind)}
+      log(`${f.name} → ${r.kind} "${r.kind==="body"?r.key:key}"${r.part?` (${r.part})`:""}${img.width!==W||img.height!==H?`, scaled from ${img.width}×${img.height}`:""}${img.width===W&&img.height===H?"":Math.abs(img.width/img.height-2/3)<0.02?" (placed like the 90% bodies)":" (not 368×448 or 2:3, so it may look stretched)"}${soft?", soft edges kept":""}`);
+    }catch(e){log(`${f.name}: could not read this image.`,true)}
+  }
+  sync();stats();
+}
+$("file").addEventListener("change",e=>addFiles([...e.target.files]));
+const drop=$("drop");
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>addFiles([...e.dataTransfer.files].filter(f=>/\.png$/i.test(f.name))));
+
+// ---------- stats & export ----------
+function allLayers(){const L=[];
+  for(const [k,v] of Object.entries(store.body))L.push([`BODY_${k}`,v]);
+  for(const [n,v] of Object.entries(store.hair)){if(v.front)L.push([`HAIR_${n}_FRONT`,v.front]);if(v.back)L.push([`HAIR_${n}_BACK`,v.back])}
+  for(const [n,v] of Object.entries(store.armor))L.push([`ARMOR_${n}`,v]);
+  for(const [n,v] of Object.entries(store.cape)){if(v.front)L.push([`CAPE_${n}_FRONT`,v.front]);if(v.back)L.push([`CAPE_${n}_BACK`,v.back])}
+  for(const [n,v] of Object.entries(store.weapon))L.push([`WEAPON_${n}`,v]);
+  return L.map(([n,v])=>[n.toUpperCase().replace(/[^A-Z0-9_]/g,"_"),v])}
+const c565i=f=>(((f>>16)>>3)<<11)|((((f>>8)&255)>>2)<<5)|((f&255)>>3);
+function encode(L){const info=new Uint8Array(N),val=new Uint16Array(N);
+  for(let k=0;k<N;k++){info[k]=(L.g[k]<<4)|L.a[k];val[k]=(L.g[k]===1||L.g[k]===2)?c565i(L.f[k]):L.s[k]}return {info,val}}
+function runs(L){const {info,val}=encode(L),out=[];let i=0;while(i<N){let j=i;while(j<N&&info[j]===info[i]&&val[j]===val[i]&&j-i<255)j++;out.push(j-i,info[i],val[i]&255,val[i]>>8);i=j}return out}
+function rle(L){return runs(L).length}
+function stats(){const L=allLayers(),raw=L.length*N*3,packed=L.reduce((s,[,v])=>s+rle(v),0);
+  $("stats").innerHTML=[[String(L.length),"layers loaded now"],[`${(raw/1024).toFixed(1)} KB`,"all layers, uncompressed"],[`${(packed/1024).toFixed(1)} KB`,"with simple run-length compression"],[`${((N*3)/1024).toFixed(1)} KB`,"per layer, uncompressed"]]
+    .map(s=>`<div class="stat"><b>${s[0]}</b><small>${s[1]}</small></div>`).join("")}
+const c565=hex=>{const n=parseInt(hex.slice(1),16);return "0x"+((((n>>16)>>3)<<11)|((((n>>8)&255)>>2)<<5)|((n&255)>>3)).toString(16).padStart(4,"0").toUpperCase()};
+const rampC=(name,list)=>`static const uint16_t ${name}[${list.length}][4] = {\n${list.map(([n,c])=>`  { ${ramp(c).map(c565).join(", ")} }, // ${n}`).join("\n")}\n};\n`;
+function exportC(){
+  let s=`// Pocket RPG character art: ${W}x${H} pixels, drawn 1:1 on the 368x448 screen.\n// Each layer is run-length encoded, row-major: records of 4 bytes { count, info, value_lo, value_hi }.\n// info = group << 4 | opacity (0 clear .. 15 solid).\n// value = RGB565 original color for groups 1 (fixed) and 2 (skin), or brightness 0..255 for groups 3-4.\n// Skin recolor: in OKLab, add (PAL_SKIN_TARGET - SKIN_BASE) to every pixel, soft-limited near black/white (Light = no change).\n// Groups: 0 clear, 1 fixed, 2 skin, 3 group A, 4 group B, 5 gem. Groups 3-4: armor/weapon material keeps the painted brightness and adds the material hue; hair, eyes, capes and trim move the layer's middle brightness (SPR_<name>_MID) onto the chosen color in OKLab, keeping each pixel's distance from it. Then blend by opacity.\n// Draw order: cape back, hair back, body, armor, cape front, hair front, weapon.\n#pragma once\n#include <stdint.h>\n\n`;
+  s+="// Group A/B per layer: body = iris/underwear, hair = hair color, armor = material/rarity trim,\n// cape = rarity fabric/clasp metal, weapon = material/rarity trim (group 5 = element gem).\n";
+  s+=`static const uint16_t PAL_OUTLINE = ${c565(OUTLINE)};\n\n`;
+  s+=`// Skin: base tone measured from the body art, and the target base of each choice (Light keeps the art as drawn).\nstatic const uint32_t SKIN_BASE = 0x${skinBaseOf(store.body[look.body]).toString(16).padStart(6,"0").toUpperCase()};\nstatic const uint32_t PAL_SKIN_TARGET[${SKINS.length}] = { ${SKINS.map((k,i)=>"0x"+(k[1]?k[1].slice(1).toUpperCase():skinBaseOf(store.body[look.body]).toString(16).padStart(6,"0").toUpperCase())).join(", ")} }; // ${SKINS.map(k=>k[0]).join(", ")}\n`;
+  s+=rampC("PAL_HAIR",HAIRC)+rampC("PAL_EYE",EYEC)+rampC("PAL_ARMOR_MAT",ARMOR_MAT)+rampC("PAL_WEAPON_MAT",WEAPON_MAT)+rampC("PAL_CLASP",CLASP_MAT);
+  s+=rampC("PAL_RARITY",RAR.map(([n,c])=>[n,c==="rainbow"?"#FF4080":c==="prism"?"#E0D0FF":c]))+"// Tiers 16-20 animate on the board (pulse, hue cycle); these are their resting colors.\n";
+  s+=`static const uint16_t PAL_ELEMENT[4] = { 0xFFFF, ${ELEMENTS.slice(1).map(e=>c565(e[1])).join(", ")} }; // neutral, fire, nature, water\n\n`;
+  const arr=(type,name,list)=>{let t=`static const ${type} ${name}[${list.length}] = {\n`;for(let i=0;i<list.length;i+=20)t+="  "+list.slice(i,i+20).join(",")+",\n";return t+"};\n"};
+  for(const [n,L] of allLayers()){
+    const r=runs(L);s+=`static const uint8_t SPR_${n}_MID[2] = { ${L.mid[3]}, ${L.mid[4]} }; // middle brightness of group A, group B\n`;s+=arr("uint8_t",`SPR_${n}`,r.map(v=>String(v)))}
+  return s}
+$("gen").addEventListener("click",()=>{$("code").value=exportC();$("toast").textContent=`${allLayers().length} layers exported`});
+$("copy").addEventListener("click",()=>{const t=$("code");if(!t.value)t.value=exportC();
+  const sel=()=>{t.select();$("toast").textContent="Selected. Press Ctrl+C or ⌘C to copy."};
+  try{navigator.clipboard.writeText(t.value).then(()=>$("toast").textContent="Copied",sel)}catch(e){sel()}});
+
+async function preload(){
+  const load=src=>new Promise(ok=>{const img=new Image();img.onload=()=>ok(img);img.src=src});
+  for(const [key,src] of [["male",PRE.userBody],["female",PRE.userBodyF]]){if(!src)continue;store.body[key]=classify(toCells(await load(src)),"body")}
+  for(const [name,src] of Object.entries(PRE.hair||{})){store.hair[name]={front:classify(toCells(await load(src)),"hair")};look.hair=look.hair||name}
+  for(const [name,src] of Object.entries(PRE.gems||{}))gemImg[name]=await load(src);
+  for(const [name,src] of Object.entries(PRE.weapon||{})){store.weapon[name]=classify(toCells(await load(src)),"weapon");look.weapon=look.weapon||name}
+  for(const [name,src] of Object.entries(PRE.cape||{})){store.cape[name]={back:classify(toCells(await load(src)),"cape")};look.cape=look.cape||name}
+  for(const [name,src] of Object.entries(PRE.capeFront||{})){if(store.cape[name])store.cape[name].front=classify(toCells(await load(src)),"cape")}
+  for(const [name,src] of Object.entries(PRE.armor||{})){const L=classify(toCells(await load(src)),"armor");sealArmor(L,store.body[/ female$/i.test(name)?"female":"male"]);store.armor[name]=L;look.armor=look.armor||name}
+  delete store.armor["Placeholder outfit"];fitHair();if(look.weapon)resolveWeapon(kindOf(look.weapon));
+  if(look.cape){const want=Object.keys(store.cape).find(n=>n.toLowerCase()===CAPE_BAND[band(look.capeTier)].toLowerCase());if(want)look.cape=want}
+  buildSlot("hair");buildSlot("armor");buildSlot("weapon");buildSlot("cape");
+  buildControls();sync();stats();
+}
+buildControls();sync();stats();requestAnimationFrame(loop);preload();
+})();
+</script>
