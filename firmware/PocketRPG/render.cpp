@@ -182,7 +182,9 @@ static const uint8_t* layerBytes(const LayerDef& L) {
   return d;
 }
 
-static void drawLayer(const LayerDef& L, int handCut, bool hideHand) {
+// hideTop/hx0/hx1: pixels from row hideTop down, between columns hx0..hx1, are left out (the body's own
+// hand and arm under the fist of a weapon drawn without a hand)
+static void drawLayer(const LayerDef& L, int handCut, bool hideHand, int hideTop = SCREEN_H, int hx0 = 0, int hx1 = -1) {
   int k = 0;
   const uint8_t* p = layerBytes(L); if (!p) return;
   const uint8_t* end = p + L.rawLen;
@@ -197,6 +199,7 @@ static void drawLayer(const LayerDef& L, int handCut, bool hideHand) {
     else { const uint8_t* q = grp == 3 ? paint.a[v & 255] : paint.b[v & 255]; c[0] = q[0]; c[1] = q[1]; c[2] = q[2]; }
     for (int i = 0; i < count; i++, k++) {
       if (hideHand && L.handRows) { int y = k / SCREEN_W, x = k % SCREEN_W; if (y >= handCut && L.handRows[y * 2] >= 0 && x >= L.handRows[y * 2] && x <= L.handRows[y * 2 + 1]) continue; }
+      if (hx1 >= hx0) { int y = k / SCREEN_W, x = k % SCREEN_W; if (y >= hideTop && x >= hx0 && x <= hx1) continue; }
       blend(k, c[0], c[1], c[2], al);
     }
   }
@@ -224,13 +227,14 @@ static void drawGem(const LayerDef& L, int element) {
 }
 
 // glow of one item (tiers 19-20): blurred silhouette in the rarity color, under the item
-static void drawGlow(const LayerDef& L, uint32_t color, float* tmp) {
+static void drawGlow(const LayerDef& L, uint32_t color, float* tmp, int hideTop = SCREEN_H, int hx0 = 0, int hx1 = -1) {
   const int N = SCREEN_W * SCREEN_H;
   memset(tmp, 0, sizeof(float) * N);
   int k = 0; const uint8_t* p = layerBytes(L); if (!p) return;
   const uint8_t* end = p + L.rawLen;
   while (p < end) { int count = p[0], info = p[1]; p += 5; float al = (info >> 4) ? (info & 15) / 15.f : 0;
-    for (int i = 0; i < count; i++, k++) tmp[k] = al > 0.4f ? 1.f : 0.f; }
+    for (int i = 0; i < count; i++, k++) { int x = k % SCREEN_W, y = k / SCREEN_W;
+      tmp[k] = al > 0.4f && !(y >= hideTop && x >= hx0 && x <= hx1) ? 1.f : 0.f; } }
   float* line = tmp + N;  // scratch line: needs SCREEN_H floats after the image (SCREEN_H >= SCREEN_W)
   for (int pass = 0; pass < 3; pass++) {   // 3 box blurs of radius 4 ~ a soft gaussian
     for (int y = 0; y < SCREEN_H; y++) {
@@ -269,11 +273,29 @@ static const LayerDef* armorFor(int tier, int bodyIdx) {
 static const char* const WEAPON_KINDS[] = { "Sword", "Axe", "Mace" };
 int weaponKindCount() { return (int)(sizeof(WEAPON_KINDS) / sizeof(WEAPON_KINDS[0])); }
 const char* weaponKindName(int k) { return WEAPON_KINDS[k >= 0 && k < weaponKindCount() ? k : 0]; }
-// Weapon drawing for a tier: "<Material> <Kind>" (Wood 1-5, Bronze 6-10, Iron 11-15, Titanium 16-20)
+// Weapon drawing for a tier: one grey "<Kind>" drawing tinted per tier when it exists (weapon_<kind>.png),
+// otherwise "<Material> <Kind>" (Wood 1-5, Bronze 6-10, Iron 11-15, Titanium 16-20)
 static const LayerDef* weaponFor(int tier, int kind) {
+  for (int i = 0; i < WEAPONS_COUNT; i++) if (sameName(WEAPONS[i].name, weaponKindName(kind))) return &WEAPONS[i];
   char want[40]; snprintf(want, sizeof want, "%s %s", WEAPON_MAT_NAME[band(tier)], weaponKindName(kind));
   for (int i = 0; i < WEAPONS_COUNT; i++) if (sameName(WEAPONS[i].name, want)) return &WEAPONS[i];
   return WEAPONS_COUNT ? &WEAPONS[0] : nullptr;
+}
+
+// The fist drawn over weapons that come without a hand (hand_front.png), and the columns it covers
+static const LayerDef* handFront(int* x0, int* x1) {
+  static int cx0 = -1, cx1 = -1;
+  const LayerDef* h = nullptr;
+  for (int i = 0; i < WEAPONS_COUNT; i++) if (sameName(WEAPONS[i].name, "Hand Front")) h = &WEAPONS[i];
+  if (h && cx0 < 0) {   // first use: find its columns
+    const uint8_t* p = layerBytes(*h);
+    if (p) { cx0 = SCREEN_W; cx1 = 0; int k = 0; const uint8_t* end = p + h->rawLen;
+      while (p < end) { int count = p[0], info = p[1]; p += 5;
+        if ((info >> 4) && (info & 15)) for (int i = 0; i < count; i++) { int x = (k + i) % SCREEN_W; if (x < cx0) cx0 = x; if (x > cx1) cx1 = x; }
+        k += count; } }
+  }
+  *x0 = cx0; *x1 = cx1;
+  return h;
 }
 
 // Cape drawing for a tier: one per band (Traveler 1-5, Ranger 6-10, Knight 11-15, Royal 16-20)
@@ -298,6 +320,13 @@ void renderCharacterLayers(const Look& look, float* work) {
   const LayerDef* hair = (look.hair >= 0 && HAIRS_COUNT) ? &HAIRS[look.hair % HAIRS_COUNT] : nullptr;
   int handCut = body.wrist;
   if (weapon && weapon->handTop < SCREEN_H && weapon->handTop + 6 < handCut) handCut = weapon->handTop + 6;
+  // a weapon drawn without a hand: the fist goes on top, and the arm under it is left out (body and armor)
+  int hx0 = 0, hx1 = -1, hideTop = SCREEN_H;
+  const LayerDef* fist = nullptr;
+  if (weapon && weapon->handTop >= SCREEN_H && !look.noBody) {
+    fist = handFront(&hx0, &hx1);
+    if (fist) { hideTop = fist->handTop; hx0 -= 8; hx1 += 4; } else hx1 = -1;
+  }
   paint.skin = makeSkin(body.skinBase, SKIN_TARGET[look.skin % 6]);
   float* scratch = work + 4 * N;  // glow scratch: N + SCREEN_H floats
 
@@ -313,14 +342,14 @@ void renderCharacterLayers(const Look& look, float* work) {
   // body (eyes = group A, underwear = group B)
   gradLUT(EYE_RGB[look.eye % 9], body.mid3, paint.a);
   gradLUT(0xA8A8A8, body.mid4, paint.b);
-  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr);
+  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr && !fist, hideTop, hx0, hx1);
   // armor
   if (armor) {
     const TierColor& tc = ARMOR_TIERS[look.armorTier - 1];
     if (tc.asDrawn) tintLUT(tc.rgb, tc.lift, paint.a); else gradLUT(tc.rgb, armor->mid3, paint.a);
     gradLUT(RARITY_RGB[look.armorTier - 1], armor->mid4, paint.b);
-    if (look.armorTier >= GLOW_FROM) drawGlow(*armor, RARITY_RGB[look.armorTier - 1], scratch);
-    drawLayer(*armor, SCREEN_H, false);
+    if (look.armorTier >= GLOW_FROM) drawGlow(*armor, RARITY_RGB[look.armorTier - 1], scratch, hideTop, hx0, hx1);
+    drawLayer(*armor, SCREEN_H, false, hideTop, hx0, hx1);
   }
   // cape front (shoulders and clasp), over the armor
   if (capeFront) {
@@ -339,6 +368,7 @@ void renderCharacterLayers(const Look& look, float* work) {
     if (t >= GLOW_FROM) drawGlow(*weapon, RARITY_RGB[t - 1], scratch);
     drawLayer(*weapon, SCREEN_H, false);
     drawGem(*weapon, look.element);
+    if (fist) drawLayer(*fist, SCREEN_H, false);   // skin: takes the hero's skin tone
   }
 }
 

@@ -13,6 +13,8 @@ File names (same as the creator page):
   cape_<name>_back.png   (behind the body; one per rarity band: traveler, ranger, knight, royal)
   cape_<name>_front.png  (shoulder part, drawn over the armor)
   weapon_<name>.png      (gem socket = solid pure-white circle, hand in skin tones)
+  weapon_<kind>.png      (one grey drawing per kind, no hand: tinted per tier; preferred over weapon_<material>_<kind>)
+  hand_front.png         (the fist, drawn over weapons that come without a hand)
   gem_fire.png, gem_nature.png, gem_water.png, gem_neutral.png
 
 Per pixel the board keeps: group (0 clear, 1 fixed color, 2 skin, 3 group A, 4 group B, 5 gem socket),
@@ -329,6 +331,8 @@ def main():
             continue
         stem = fn[:-4]
         kind = stem.split("_")[0]
+        if kind == "hand":   # hand_front.png: the fist drawn over weapons that come without a hand
+            kind = "weapon"
         if kind not in entries:
             continue
         L = classify(load(os.path.join(ART, fn)), kind)
@@ -354,7 +358,7 @@ def main():
             extra = ", nullptr, 0, 0"
         sock = L.get("socket", (0, 0, 0))
         hand_top = L.get("handTop", H)
-        label = stem.split("_", 1)[1] if "_" in stem else stem
+        label = stem.split("_", 1)[1] if "_" in stem and not stem.startswith("hand_") else stem
         if kind == "cape" and label.endswith("_back"):
             label = label[:-len("_back")]   # cape_<name>_back.png behind the body, cape_<name>_front.png ("<Name> Front") over the armor
         if kind == "hair":
