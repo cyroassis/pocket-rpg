@@ -128,8 +128,9 @@ static void button(float x, float y, float w, float h, const char* label, BtnKin
 static void header(int i) {
   const int n = STEP_COUNT, gap = 8, dw = 8, cw = 26;
   float total = (n - 1) * dw + cw + (n - 1) * gap, x = (SCREEN_W - total) / 2;
-  for (int k = 0; k < n; k++) { int w = k == i ? cw : dw; roundBox(x, 12, w, 8, 4, k == i ? C_GOLD : k < i ? C_MUTED : C_DIM, 1); x += w + gap; }
-  text(FONT_PX24, STEP_TITLES[i], SCREEN_W / 2, 50, C_INK);
+  (void)total; (void)x;
+  for (int k = 0; k < n; k++) kitCentered(k == i ? UI_K_DOT_ON : UI_K_DOT_OFF, SCREEN_W / 2 - (n - 1) * 9 + k * 18, 16);
+  textOutlined(FONT_PXB24, STEP_TITLES[i], SCREEN_W / 2, 52, C_CREAM, C_OUTLINE, 2);
 }
 static void chevron(float cx, float cy, int dir, Rgb c) {
   thickLine(cx - 7 * dir, cy - 15, cx + 8 * dir, cy, 5, c);
@@ -137,17 +138,16 @@ static void chevron(float cx, float cy, int dir, Rgb c) {
 }
 static void arrows(Action fn) {
   float cy = PV_Y + PV_H / 2;
-  roundBox(6, cy - 48, 60, 96, 16, C_PANEL, 0.82f, C_LINE, 2); chevron(36, cy, -1, C_INK);
-  roundBox(SCREEN_W - 66, cy - 48, 60, 96, 16, C_PANEL, 0.82f, C_LINE, 2); chevron(SCREEN_W - 36, cy, 1, C_INK);
+  kitCentered(UI_K_ARROW_L, 30, cy); kitCentered(UI_K_ARROW_R, SCREEN_W - 30, cy);
   // the whole left or right half of the picture (down to the dots) works as the arrow; a swipe does too
   swipeFn = fn;
   hit(0, PV_Y, SCREEN_W / 2, NAV_Y - 8 - PV_Y, fn, -1);
   hit(SCREEN_W / 2, PV_Y, SCREEN_W / 2, NAV_Y - 8 - PV_Y, fn, 1);
 }
 static void choiceTag(const char* label) {
-  float w = textWidth(FONT_PXB16, label) + 32; if (w < 90) w = 90;
-  roundBox((SCREEN_W - w) / 2, PV_Y + PV_H - 6, w, 30, 15, C_PANEL2, 1, C_LINE, 2);
-  text(FONT_PXB16, label, SCREEN_W / 2, (int)(PV_Y + PV_H + 14), C_INK);
+  float w = textWidth(FONT_PXB16, label) + 40; if (w < 100) w = 100;
+  uiDrawBox(UI_K_TITLE, (int)((SCREEN_W - w) / 2), (int)(PV_Y + PV_H - 8), (int)w, 36);
+  text(FONT_PXB16, label, SCREEN_W / 2, (int)(PV_Y + PV_H + 16), C_CREAM);
 }
 static const float ROW_Y = 324;   // swatches / dots under the picture: they show the choices, the arrows change them
 static void swatches(const Rgb* list, int n, int cur) {
@@ -161,8 +161,8 @@ static void swatches(const Rgb* list, int n, int cur) {
   }
 }
 static void dotsRow(int n, int cur) {
-  float gap = 14, x = (SCREEN_W - (n - 1) * gap) / 2;
-  for (int i = 0; i < n; i++) disc(x + i * gap, ROW_Y, i == cur ? 5 : 3.5f, i == cur ? C_GOLD : C_DIM);
+  float gap = 18, x = (SCREEN_W - (n - 1) * gap) / 2;
+  for (int i = 0; i < n; i++) kitCentered(i == cur ? UI_K_DOT_ON : UI_K_DOT_OFF, x + i * gap, ROW_Y);
 }
 
 // ---------------------------------------------------------------- icons
@@ -259,7 +259,8 @@ static void go(Screen s, int st = -1) {
 }
 static void actNext(int) { if (step < STEP_COUNT - 1) go(STEP, step + 1); else go(READY); }
 static void actBack(int) { if (step > 0) go(STEP, step - 1); else go(WELCOME); }
-static void actStart(int) { go(STEP, 0); }
+static void actStart(int) { uiFree(UI_SPLASH);   // the logo is not needed after the welcome
+  go(STEP, 0); }
 static void actHome(int) { go(HOME); }
 static void nav(bool canNext) {
   button(10, NAV_Y, 120, NAV_H, "Back", GHOST, actBack);
@@ -301,11 +302,9 @@ static void actDice(int) {
 
 // ---------------------------------------------------------------- screens
 static void drawWelcome() {
-  drawBackground(fb);
-  ensureCharacter(false);
-  blitCharacter(work, fb, VIEW_FULL.sx, VIEW_FULL.sy, VIEW_FULL.sw, VIEW_FULL.sh, 92, 150, 184, 224, 0, SCREEN_H, 2, 0x1A1820);
-  text(FONT_PX32, "POCKET RPG", SCREEN_W / 2, 92, C_GOLD);
-  text(FONT_PX16, "Every hero starts somewhere.", SCREEN_W / 2, 126, C_MUTED);
+  fillRect(0, 0, SCREEN_W, SCREEN_H, 0x000000);
+  uiDraw(UI_SPLASH, uiX(UI_SPLASH), uiY(UI_SPLASH) - 14);   // the logo (kept unpacked while this screen shows)
+  text(FONT_PXB16, "EVERY HERO STARTS SOMEWHERE", SCREEN_W / 2, 336, C_LAVENDER);
   button(10, NAV_Y, 348, NAV_H, "Create your hero", PRIMARY, actStart);
 }
 
@@ -314,7 +313,7 @@ static void drawProf() {
   for (int i = 0; i < PROFESSION_COUNT; i++) {
     // three wide cards: icon on the left, name and what it makes on the right
     float x = 10, y = 82 + i * 89, w = 348, h = 82; bool on = hero.prof == i;
-    roundBox(x, y, w, h, 14, on ? C_PANEL2 : C_PANEL, 1, on ? C_GOLD : C_LINE, on ? 3 : 2);
+    uiDrawBox(on ? UI_K_SLOT_SEL : UI_K_PANEL_S, (int)x, (int)y, (int)w, (int)h);
     icon(i, x + 52, y + h / 2 + 2, on ? C_GOLD : C_INK, on ? C_PANEL2 : C_PANEL);
     char up[16]; strncpy(up, PROFESSION_NAMES[i], 15); up[15] = 0; for (char* c = up; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
     text(FONT_PX24, up, (int)(x + 100), (int)(y + 37), on ? C_GOLD : C_INK, LEFT);
@@ -328,15 +327,15 @@ static void drawName(uint32_t) {
   if (!hero.name[0]) actDice(0);
   ensureCharacter(false);
   drawView(VIEW_HEAD, 60, 154, 60, 214, 1);
-  roundBox(10, 220, 348, 54, 14, C_PANEL, 1, C_LINE, 2);
-  text(FONT_PX24, hero.name, SCREEN_W / 2, 255, C_GOLD);
+  uiDrawBox(UI_K_PANEL_S, 10, 218, 348, 58);
+  text(FONT_PXB24, hero.name, SCREEN_W / 2, 256, C_GOLD);
   // the dice: a big button that rolls a new name
-  roundBox(10, 280, 348, 62, 14, C_PANEL2, 1, C_GOLD, 2);
-  int tw = textWidth(FONT_PX24, "Roll a name");
+  uiDrawBox(UI_K_BTN_DARK, 10, 282, 348, 62);
+  int tw = textWidth(FONT_PXB24, "ROLL A NAME");
   float x0 = (SCREEN_W - (tw + 44)) / 2;
-  icon(4, x0 + 14, 311, C_GOLD, C_PANEL2);
-  text(FONT_PX24, "Roll a name", (int)(x0 + 44), 318, C_INK, LEFT);
-  hit(10, 280, 348, 62, actDice);
+  icon(4, x0 + 14, 313, C_GOLD, 0x14122A);
+  text(FONT_PXB24, "ROLL A NAME", (int)(x0 + 44), 322, 0xFFF4DA, LEFT);
+  hit(10, 282, 348, 62, actDice);
   nav(true);
 }
 
@@ -369,10 +368,11 @@ static void drawStep(uint32_t now) {
 
 static void drawReady(uint32_t now) {
   drawBackground(fb);
-  heroFull(80, 270);
-  text(FONT_PX24, hero.name[0] ? hero.name : "Hero", SCREEN_W / 2, 42, C_GOLD);
-  char sub[32]; snprintf(sub, sizeof sub, "the %s", PROFESSION_NAMES[hero.prof < 0 ? 0 : hero.prof]);
-  text(FONT_PX16, sub, SCREEN_W / 2, 68, C_MUTED);
+  heroFull(92, 270);
+  char nm[HERO_MAX_NAME + 1]; strcpy(nm, hero.name[0] ? hero.name : "Hero"); for (char* q = nm; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+  kitTitle((SCREEN_W - (textWidth(textWidth(FONT_PXB48, nm) <= 250 ? FONT_PXB48 : FONT_PXB24, nm) + 44)) / 2, 8, nm, 56);
+  char sub[32]; snprintf(sub, sizeof sub, "THE %s", PROFESSION_NAMES[hero.prof < 0 ? 0 : hero.prof]); for (char* q = sub; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+  text(FONT_PXB16, sub, SCREEN_W / 2, 84, C_LAVENDER);
   // the hero starts with no gear: armor, capes and weapons come from crafting and exploring
   (void)now;
   button(10, NAV_Y, 348, NAV_H, "Start adventure", PRIMARY, actHome);
