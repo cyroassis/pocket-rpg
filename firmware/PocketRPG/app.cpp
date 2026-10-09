@@ -429,6 +429,40 @@ static void shardCount(const char* have, int right, int cy, int left) {
   text(f, have, right, cy + (&f == &FONT_PXB24 ? 12 : 8), C_INK, RIGHT);
   uiDraw(UI_SHARD, right - textWidth(f, have) - 6 - uiW(UI_SHARD), cy - uiH(UI_SHARD) / 2);
 }
+// ---------------------------------------------------------------- UI kit (art/ui/kit, tools/build_ui.py)
+// Every screen is built from the same stretchable pieces: panels, title plates, buttons, slots, bars.
+enum CardBtn { CB_DARK, CB_GOLD, CB_DANGER, CB_OFF };
+static const Rgb C_SCREEN = 0x07060E, C_CREAM = 0xFFF0C8;
+static void kitScreen() { fillRect(0, 0, SCREEN_W, SCREEN_H, C_SCREEN); }
+// title plate with a big outlined title; the plate grows with the word
+static int kitTitle(int x, int y, const char* label, int h = 60) {
+  const Font& f = textWidth(FONT_PXB48, label) <= 250 ? FONT_PXB48 : FONT_PXB24;
+  int w = textWidth(f, label) + 44; if (w < 110) w = 110;
+  uiDrawBox(UI_K_TITLE, x, y, w, h);
+  textOutlined(f, label, x + w / 2, y + h / 2 + (&f == &FONT_PXB48 ? 16 : 9), C_CREAM, C_OUTLINE, 2);
+  return w;
+}
+static void kitButton(int x, int y, int w, int h, const char* label, int kind, Action fn, int arg = 0) {
+  int id = kind == CB_GOLD ? UI_K_BTN_GOLD : kind == CB_DANGER ? UI_K_BTN_RED : kind == CB_OFF ? UI_K_BTN_OFF : UI_K_BTN_DARK;
+  uiDrawBox(id, x, y, w, h);
+  bool big = textWidth(FONT_PXB24, label) <= w - 28;
+  Rgb c = kind == CB_GOLD ? 0x1A1206 : kind == CB_OFF ? 0x8C8C98 : 0xFFF4DA;
+  text(big ? FONT_PXB24 : FONT_PXB16, label, x + w / 2, y + h / 2 + (big ? 9 : 6), c);
+  if (kind != CB_OFF) hit(x, y, w, h, fn, arg);
+}
+// an empty bar with a gold fill (0..1)
+static void kitBar(int x, int y, int w, int h, float frac) {
+  uiDrawBox(UI_K_BAR, x, y, w, h);
+  int in = h >= 22 ? 6 : 5;
+  float iw = w - 2 * in, ih = h - 2 * in;
+  if (frac <= 0) return;
+  if (frac > 1) frac = 1;
+  float fw = iw * frac; if (fw < ih) fw = ih;
+  roundBox(x + in, y + in, fw, ih, ih / 2, 0xF2B92A, 1);
+  roundBox(x + in + 2, y + in + 1, fw - 4 > 0 ? fw - 4 : 0, ih / 3, ih / 6, 0xFFE07A, 0.8f);   // shine
+}
+static void kitCentered(int id, float cx, float cy) { uiDraw(id, (int)(cx - uiW(id) / 2.f + 0.5f), (int)(cy - uiH(id) / 2.f + 0.5f)); }
+
 static void drawHome() {
   drawBackgroundAt(fb, SCREEN_W / 2 + HERO_SHIFT);
   ensureCharacter(true);
@@ -441,12 +475,12 @@ static void drawHome() {
   char profUp[16]; snprintf(profUp, sizeof profUp, "%s", prof); for (char* q = profUp; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
   const Font& nf = textWidth(FONT_PXB24, up) <= 150 ? FONT_PXB24 : FONT_PXB16;
   char num[16]; fmtThousands(stepsToday, num);
-  int px = uiX(UI_NAME), py = uiY(UI_NAME), pad = 18;
+  int px = 7, py = 7, pad = 18;
   int inner = textWidth(nf, up);
   if (textWidth(FONT_PX16, profUp) > inner) inner = textWidth(FONT_PX16, profUp);
   int stepsW = uiW(UI_FEET) + 6 + textWidth(FONT_PXB16, num);
   if (stepsW > inner) inner = stepsW;
-  uiDrawWide(UI_NAME, px, py, inner + 2 * pad);
+  { int w = inner + 2 * pad; if (w < 113) w = 113; uiDrawBox(UI_K_PANEL_S, px, py, w, 89); }
   int tx = px + pad;
   text(nf, up, tx, py + 35, C_GOLD, LEFT);
   text(FONT_PX16, profUp, tx, py + 57, C_LAVENDER, LEFT);
@@ -457,11 +491,9 @@ static void drawHome() {
   int lv = heroLevel();
   float into = (float)(game.xp - xpAtLevel(lv)) / xpToNext(lv);
   if (into < 0) into = 0; if (into > 1) into = 1;
-  int bx = uiX(UI_XPBAR), fx = uiX(UI_XPFILL), fullW = uiW(UI_XPBAR) - 2 * (fx - bx);
-  uiDraw(UI_XPBAR, bx, uiY(UI_XPBAR));
-  int fw = (int)(fullW * into + 0.5f);
-  if (fw > 0) uiDrawCols(UI_XPFILL, fx, uiY(UI_XPFILL), fw);
-  int right = bx + uiW(UI_XPBAR) - 6;
+  int bx = 271, bw = 81;
+  kitBar(bx, 21, bw, 18, into);
+  int right = bx + bw - 6;
   textOutlined(FONT_PXB16, "LEVEL", right, 58, C_LAVENDER, C_OUTLINE, 2, RIGHT);
   char ln[8]; snprintf(ln, sizeof ln, "%d", lv);
   textOutlined(FONT_PX32, ln, right, 88, C_GOLD, C_OUTLINE, 2, RIGHT);
@@ -479,12 +511,12 @@ static void drawHome() {
   if (bannerCount) {
     if (!bannerAt) bannerAt = lastNow ? lastNow : 1;
     const Banner& b = banners[0];
-    int r = uiX(UI_BANNER) + uiW(UI_BANNER), y = uiY(UI_BANNER), pic = b.item.tier ? 46 : 0, pad = 16;
+    int r = 361, y = 386, bh = 55, pic = b.item.tier ? 46 : 0, pad = 16;
     int tw = textWidth(FONT_PX16, b.title); if (textWidth(FONT_PXB16, b.line) > tw) tw = textWidth(FONT_PXB16, b.line);
-    int w = pad + pic + tw + pad; if (w < uiW(UI_BANNER)) w = uiW(UI_BANNER);
+    int w = pad + pic + tw + pad; if (w < 156) w = 156;
     int x = r - w;
-    uiDrawWide(UI_BANNER, x, y, w);
-    if (pic) itemIcon(b.item, x + pad + 18, y + uiH(UI_BANNER) / 2, 40, C_PANEL, false);
+    uiDrawBox(UI_K_PANEL_S, x, y, w, bh);
+    if (pic) itemIcon(b.item, x + pad + 18, y + bh / 2, 40, C_PANEL, false);
     int tx2 = x + pad + pic;
     text(FONT_PX16, b.title, tx2, y + 24, C_LAVENDER, LEFT);
     text(FONT_PXB16, b.line, tx2, y + 44, b.col, LEFT);
@@ -494,22 +526,25 @@ static void drawHome() {
 // ---------------------------------------------------------------- explore: what walking brings
 // art from art/ui/explore.png (tools/build_ui.py), with the changing parts drawn here
 static void drawExplore() {
-  uiDraw(UI_EXPLORE_BG, 0, 0);
+  kitScreen();
+  int tw = kitTitle(17, 19, "EXPLORE");
+  text(FONT_PXB16, "WALK FOR SHARDS", 36, 100, C_LAVENDER, LEFT);
   bool done = game.finds >= DAILY_FINDS;
   uint32_t into = stepsToday >= game.counted ? stepsToday - game.counted : 0;
   if (into > STEPS_PER_FIND) into = STEPS_PER_FIND;
   char t[40];
-  // top right: the shards you have
   char have[16]; fmtThousands(game.mats, have);
-  shardCount(have, 350, 50, 222);
+  shardCount(have, 350, 50, 17 + tw + 8);
   // next find
-  text(FONT_PXB16, done ? "NEXT XP" : "NEXT FIND", 37, 143, C_LAVENDER, LEFT);
+  uiDrawBox(UI_K_PANEL, 13, 110, 343, 108);
+  text(FONT_PXB16, done ? "NEXT XP" : "NEXT FIND", 34, 143, C_LAVENDER, LEFT);
   snprintf(t, sizeof t, "%lu STEPS", (unsigned long)(STEPS_PER_FIND - into));
-  text(FONT_PXB24, t, 331, 146, C_GOLD, RIGHT);
-  float bx0 = UI_EXPLORE_BAR_X0 + 1, by0 = UI_EXPLORE_BAR_Y0 + 1, bx1 = UI_EXPLORE_BAR_X1 - 1, by1 = UI_EXPLORE_BAR_Y1 - 1, bh = by1 - by0;
-  if (into) { float w = (bx1 - bx0) * into / STEPS_PER_FIND; if (w < bh) w = bh; roundBox(bx0, by0, w, bh, bh / 2, C_GOLD, 1); }
-  text(FONT_PXB16, done ? "SHARDS DONE FOR TODAY" : "+1 SHARD  +5 XP", SCREEN_W / 2, 204, C_LAVENDER);
+  text(FONT_PXB24, t, 335, 146, C_GOLD, RIGHT);
+  kitBar(30, 156, 309, 26, (float)into / STEPS_PER_FIND);
+  text(FONT_PXB16, done ? "SHARDS DONE FOR TODAY" : "+1 SHARD  +5 XP", SCREEN_W / 2, 205, C_LAVENDER);
   // today
+  uiDrawBox(UI_K_PANEL_S, 13, 226, 168, 86); uiDrawBox(UI_K_PANEL_S, 188, 226, 168, 86);
+  text(FONT_PXB16, "FINDS TODAY", 97, 254, C_LAVENDER); text(FONT_PXB16, "XP TODAY", 272, 254, C_LAVENDER);
   snprintf(t, sizeof t, "%d/%d", game.finds, DAILY_FINDS);
   text(FONT_PX32, t, 97, 293, C_GOLD);
   snprintf(t, sizeof t, "+%lu", (unsigned long)game.xpDay);
@@ -524,7 +559,7 @@ static void drawExplore() {
   char tot[16]; fmtThousands(totalSteps(game), tot);
   snprintf(t, sizeof t, "TOTAL STEPS %s", tot);
   text(FONT_PXB16, t, SCREEN_W / 2, 360, C_LAVENDER);
-  hit(13, 369, 343, 61, actGo, HOME);   // Back (its label is in the art)
+  kitButton(13, 372, 343, 62, "BACK", CB_DARK, actGo, HOME);
 }
 
 // ---------------------------------------------------------------- craft
@@ -549,31 +584,26 @@ static void actCraft(int) {
 }
 // ---------------------------------------------------------------- item card (art/ui/item.png): new item, or an item tapped
 // in the bag, the gear or a trade. The frame and button shapes are art; the rest is drawn here.
-enum CardBtn { CB_DARK, CB_GOLD, CB_DANGER, CB_OFF };
-static const float CARD_CX = 183.2f, CARD_CY = 154.8f, CARD_R = 69.8f;
+static const float CARD_CX = 184, CARD_CY = 152, CARD_R = 66;
 static void cardBase(const Item& it, const char* title) {
-  uiDraw(UI_CARD_BG, 0, 0);
-  textOutlined(FONT_PXB24, title, SCREEN_W / 2, 68, 0xFFE9A8, C_OUTLINE, 2);
+  kitScreen();
+  uiDrawBox(UI_K_PANEL, 8, 8, 352, 432);
+  textOutlined(FONT_PXB24, title, SCREEN_W / 2, 62, 0xFFE9A8, C_OUTLINE, 2);
   Rgb rc = rarityRgb(it.tier);
   disc(CARD_CX, CARD_CY, CARD_R, rc, 0.16f); ring(CARD_CX, CARD_CY, CARD_R - 1.5f, 3, rc);
-  itemIcon(it, CARD_CX, CARD_CY, 116, C_PANEL, false);
+  itemIcon(it, CARD_CX, CARD_CY, 112, C_PANEL, false);
   char nm[28], tl[40];
   itemName(it, nm, sizeof nm); for (char* q = nm; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
   tierLine(it, tl, sizeof tl);
-  text(textWidth(FONT_PXB24, nm) <= 300 ? FONT_PXB24 : FONT_PXB16, nm, SCREEN_W / 2, 259, 0xFFF4DA);
-  text(FONT_PXB16, tl, SCREEN_W / 2, 287, rc);
+  text(textWidth(FONT_PXB24, nm) <= 300 ? FONT_PXB24 : FONT_PXB16, nm, SCREEN_W / 2, 256, 0xFFF4DA);
+  text(FONT_PXB16, tl, SCREEN_W / 2, 284, rc);
 }
-static void cardLine(int i, const char* s, Rgb c) { text(i ? FONT_PX16 : FONT_PXB16, s, SCREEN_W / 2, i ? 329 : 312, c); }
+static void cardLine(int i, const char* s, Rgb c) { text(i ? FONT_PX16 : FONT_PXB16, s, SCREEN_W / 2, i ? 329 : 310, c); }
 // buttons in a row along the bottom of the card: n of them, the i-th one
 static void cardButton(int i, int n, const char* label, int kind, Action fn, int arg = 0) {
-  const int left = 27, right = 341, gap = 8;
+  const int left = 26, right = 342, gap = 8;
   int w = (right - left - gap * (n - 1)) / n, x = left + i * (w + gap);
-  int id = kind == CB_GOLD ? UI_BTN_GOLD : UI_BTN_DARK, y = uiY(UI_BTN_DARK), h = uiH(id);
-  uiDrawWide(id, x, y, w);
-  bool big = textWidth(FONT_PXB24, label) <= w - 30;
-  Rgb c = kind == CB_GOLD ? 0x1A1206 : kind == CB_DANGER ? C_DANGER : kind == CB_OFF ? C_DIM : 0xFFF4DA;
-  text(big ? FONT_PXB24 : FONT_PXB16, label, x + w / 2, y + h / 2 + (big ? 9 : 6), c);
-  if (kind != CB_OFF) hit(x, y, w, h, fn, arg);
+  kitButton(x, 350, w, 64, label, kind, fn, arg);
 }
 
 static void actCraftDone(int) { craftPhase = 0; fitAmount(); }
@@ -581,22 +611,21 @@ static void actEquipCrafted(int) { if (gameEquip(game, craftSlot)) platformSaveG
 static void actCraftToBag(int) { craftPhase = 0; fitAmount(); go(BAG); }
 
 static void drawCraft(uint32_t now) {
-  drawBackground(fb);
   if (craftPhase == 1) {   // the hammer at work, on the item card: the frame rings at each strike and sparks fly
-    uiDraw(UI_CARD_BG, 0, 0);
+    kitScreen();
+    uiDrawBox(UI_K_PANEL, 8, 8, 352, 432);
     static const char* const WORK[3] = { "FORGING", "CRAFTING", "SEWING" };
     char t[24]; int dots = (int)((now - craftAt) / 250) % 4;
     snprintf(t, sizeof t, "%s%.*s", WORK[craftType() < 3 ? craftType() : 1], dots, "...");
     textOutlined(FONT_PXB24, t, SCREEN_W / 2 - textWidth(FONT_PXB24, WORK[craftType() < 3 ? craftType() : 1]) / 2, 68, 0xFFE9A8, C_OUTLINE, 2, LEFT);
     float tt = (float)(now - craftAt) / CRAFT_MS, beat = fmodf(tt * 4, 1.f), hitK = beat < 0.2f ? 1 - beat / 0.2f : 0;
-    disc(CARD_CX, CARD_CY, CARD_R + 14 * hitK, C_GOLD, 0.05f + 0.10f * hitK);   // glow at each strike
-    disc(CARD_CX, CARD_CY, CARD_R, 0x0E0C1A, 1);
-    ring(CARD_CX, CARD_CY, CARD_R - 1.5f, 3 + 2 * hitK, C_GOLD);
+    disc(CARD_CX, CARD_CY, CARD_R + 16 + 14 * hitK, C_GOLD, 0.04f + 0.10f * hitK);   // glow at each strike
+    kitCentered(UI_K_ROUND, CARD_CX, CARD_CY);
     int ic = craftType() == IT_WEAPON ? UI_ICON_SWORD + (craftKind < 3 ? craftKind : 0) : craftType() == IT_ARMOR ? UI_ICON_ARMOR : UI_ICON_CAPE;
     int shake = hitK > 0.5f ? ((int)(now / 40) % 2 ? 2 : -2) : 0;
     uiDraw(ic, (int)(CARD_CX - uiW(ic) / 2.f) + shake, (int)(CARD_CY - uiH(ic) / 2.f) + (int)(3 * hitK));
     for (int i = 0; i < 10; i++) {   // sparks
-      float ang = i * 0.628f + (int)(tt * 4) * 0.45f, r = CARD_R + 6 + 46 * beat;
+      float ang = i * 0.628f + (int)(tt * 4) * 0.45f, r = CARD_R + 14 + 44 * beat;
       if (beat < 0.6f) disc(CARD_CX + cosf(ang) * r, CARD_CY + sinf(ang) * r, 3.5f * (1 - beat / 0.6f) + 1, 0xFFE3A3, 1 - beat / 0.6f);
     }
     // the luck being rolled, and a bar that fills while it works
@@ -622,51 +651,54 @@ static void drawCraft(uint32_t now) {
     else cardButton(1, 2, "BAG", CB_DARK, actCraftToBag);
     return;
   }
-  // the picker: art from art/ui/craft.png (tools/build_ui.py), with the changing parts drawn here
-  uiDraw(UI_CRAFT_BG, 0, 0);
+  // the picker
+  kitScreen();
+  kitTitle(16, 18, "CRAFT");
   char t[40];
   snprintf(t, sizeof t, "%s", PROFESSION_MAKES[craftType()]); for (char* q = t; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
-  text(FONT_PXB16, t, 32, 94, C_LAVENDER, LEFT);
+  text(FONT_PXB16, t, 32, 98, C_LAVENDER, LEFT);
   // top right: the shards you have (and the weapon kind)
   char have[16]; fmtThousands(game.mats, have);
-  shardCount(have, 352, 42, 226);
+  shardCount(have, 352, 42, 214);
   if (craftType() == IT_WEAPON) {
     char up[16]; strncpy(up, weaponKindName(craftKind), 15); up[15] = 0; for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
     text(FONT_PXB16, up, 352, 90, C_GOLD, RIGHT);
   }
   // what you are making, in the round frame (art/ui/icons)
+  const float fx = 184, fy = 160;
+  disc(fx, fy, 78, 0x3A2E7A, 0.14f); disc(fx, fy, 68, 0x3A2E7A, 0.16f);   // soft glow behind the frame
+  kitCentered(UI_K_ROUND_S, fx, fy);
   int ic = craftType() == IT_WEAPON ? UI_ICON_SWORD + (craftKind < 3 ? craftKind : 0) : craftType() == IT_ARMOR ? UI_ICON_ARMOR : UI_ICON_CAPE;
-  uiDraw(ic, (int)(UI_CRAFT_CX - uiW(ic) / 2.f + 0.5f), (int)(UI_CRAFT_CY - uiH(ic) / 2.f + 0.5f));
+  kitCentered(ic, fx, fy);
   if (craftType() == IT_WEAPON && weaponKindCount() > 1) {   // which weapon: arrows beside the picture
-    uiDraw(UI_CRAFT_ARROW_L, uiX(UI_CRAFT_ARROW_L), uiY(UI_CRAFT_ARROW_L));
-    uiDraw(UI_CRAFT_ARROW_R, uiX(UI_CRAFT_ARROW_R), uiY(UI_CRAFT_ARROW_R));
+    kitCentered(UI_K_ARROW_L, 88, fy); kitCentered(UI_K_ARROW_R, 280, fy);
     hit(40, 104, 144, 108, actKind, -1); hit(184, 104, 144, 108, actKind, 1);
     swipeFn = actKind;
   }
-  // how many shards go in: the whole half of the panel works as the arrow
+  // how many shards go in: arrows inside the panel; the whole half of the panel works as the arrow
   fitAmount();
+  uiDrawBox(UI_K_PANEL, 15, 226, 338, 92);
+  kitCentered(UI_K_ARROW_L, 50, 272); kitCentered(UI_K_ARROW_R, 318, 272);
   snprintf(t, sizeof t, "%d", craftAmount);
-  text(FONT_PXB48, t, SCREEN_W / 2, 276, C_GOLD);
-  text(FONT_PXB16, "SHARDS", SCREEN_W / 2, 296, C_LAVENDER);
-  hit(14, 214, 170, 96, actAmount, -1); hit(184, 214, 170, 96, actAmount, 1);
+  text(FONT_PXB48, t, SCREEN_W / 2, 283, C_GOLD);
+  text(FONT_PXB16, "SHARDS", SCREEN_W / 2, 305, C_LAVENDER);
+  hit(14, 224, 170, 96, actAmount, -1); hit(184, 224, 170, 96, actAmount, 1);
   bool full = bagFreeSlot(game) < 0, poor = game.mats < CRAFT_MIN;
   bool note = amountNoteAt && lastNow - amountNoteAt < 1800;
-  if (poor) text(FONT_PXB16, "WALK TO FIND SHARDS", SCREEN_W / 2, 336, C_DANGER);
-  else if (note) { snprintf(t, sizeof t, "YOU HAVE %u SHARDS", (unsigned)game.mats); text(FONT_PXB16, t, SCREEN_W / 2, 336, C_DANGER); }
-  else if (full) text(FONT_PXB16, "YOUR BAG IS FULL", SCREEN_W / 2, 336, C_DANGER);
+  if (poor) text(FONT_PXB16, "WALK TO FIND SHARDS", SCREEN_W / 2, 342, C_DANGER);
+  else if (note) { snprintf(t, sizeof t, "YOU HAVE %u SHARDS", (unsigned)game.mats); text(FONT_PXB16, t, SCREEN_W / 2, 342, C_DANGER); }
+  else if (full) text(FONT_PXB16, "YOUR BAG IS FULL", SCREEN_W / 2, 342, C_DANGER);
   else {
     int r = craftRolls(craftAmount);
     snprintf(t, sizeof t, "LUCK X%d", r);
     char x2[16]; snprintf(x2, sizeof x2, "%d XP", r * XP_PER_ROLL);
     int w1 = textWidth(FONT_PXB16, t), w2 = textWidth(FONT_PXB16, x2), gap = 26, x0 = (SCREEN_W - (w1 + gap + w2)) / 2;
-    text(FONT_PXB16, t, x0, 336, C_INK, LEFT);
-    text(FONT_PXB16, "+", x0 + w1 + gap / 2, 336, C_GOLD);
-    text(FONT_PXB16, x2, x0 + w1 + gap, 336, C_INK, LEFT);
+    text(FONT_PXB16, t, x0, 342, C_INK, LEFT);
+    text(FONT_PXB16, "+", x0 + w1 + gap / 2, 342, C_GOLD);
+    text(FONT_PXB16, x2, x0 + w1 + gap, 342, C_INK, LEFT);
   }
-  // buttons (their frames are in the background)
-  text(FONT_PXB24, "BACK", 87, 388, C_INK); hit(16, 346, 143, 66, actGo, HOME);
-  if (poor || full) { fillRect(166, 346, 187, 66, 0x000000, 0.6f); text(FONT_PXB24, "CRAFT", 259, 388, 0x5A4A20); }
-  else { text(FONT_PXB24, "CRAFT", 259, 388, C_GOLD_INK); hit(166, 346, 187, 66, actCraft); }
+  kitButton(15, 360, 140, 64, "BACK", CB_DARK, actGo, HOME);
+  kitButton(163, 360, 190, 64, "CRAFT", poor || full ? CB_OFF : CB_GOLD, actCraft);
 }
 
 // ---------------------------------------------------------------- bag: 20 slots on two pages
@@ -689,15 +721,14 @@ static void actTradeOpen(int);
 static const float BAG_CX[4] = { 52.5f, 140.9f, 227.7f, 314.5f }, BAG_CY[3] = { 118.2f, 204.4f, 289.9f }, BAG_SLOT = 76;
 static bool tradeLocked(int bagSlot);
 static void drawBag() {
-  uiDraw(UI_BAG_BG, 0, 0);
+  kitScreen();
+  int tw = kitTitle(11, 14, "BAG", 56);
   char t[16]; snprintf(t, sizeof t, "%d/%d", bagCount(game), BAG_SIZE);
   const char* count = bagPicking ? "PICK" : t;
-  text(FONT_PXB24, count, 136, 53, C_LAVENDER, LEFT);
+  int cx0 = 11 + tw + 10;
+  text(FONT_PXB16, count, cx0, 48, C_LAVENDER, LEFT);
   char have[16]; fmtThousands(game.mats, have);
-  int room = 350 - (136 + textWidth(FONT_PXB24, count) + 14) - uiW(UI_SHARD) - 6;   // big numbers shrink to fit
-  const Font& hf = textWidth(FONT_PXB24, have) <= room ? FONT_PXB24 : FONT_PXB16;
-  text(hf, have, 350, &hf == &FONT_PXB24 ? 54 : 50, C_INK, RIGHT);
-  uiDraw(UI_SHARD, 350 - textWidth(hf, have) - 6 - uiW(UI_SHARD), 44 - uiH(UI_SHARD) / 2);
+  shardCount(have, 352, 42, cx0 + textWidth(FONT_PXB16, count) + 8);
   swipeFn = actBagSwipe;
   int lv = heroLevel();
   for (int i = 0; i < 12; i++) {
@@ -705,6 +736,8 @@ static void drawBag() {
     if (idx >= BAG_SIZE) break;
     float cx = BAG_CX[i % 4], cy = BAG_CY[i / 4], x = cx - BAG_SLOT / 2, y = cy - BAG_SLOT / 2;
     const Item& it = game.bag[idx];
+    bool offered = bagPicking && tradeOffers(idx);
+    uiDrawBox(offered ? UI_K_SLOT_SEL : UI_K_SLOT, (int)x - 3, (int)y - 3, (int)BAG_SLOT + 6, (int)BAG_SLOT + 6);
     if (!it.tier) continue;
     Rgb rc = rarityRgb(it.tier); bool locked = it.tier > lv;
     itemIcon(it, cx, cy - 2, 64, C_PANEL2, locked);
@@ -716,20 +749,18 @@ static void drawBag() {
       text(FONT_PXB16, "TRADE", (int)cx, (int)cy + 6, C_GOLD);
       if (bagPicking) continue;
     }
-    if (bagPicking && tradeOffers(idx)) { roundBox(x + 2, y + 2, BAG_SLOT - 4, BAG_SLOT - 4, 8, C_BG, 0.6f, C_GOLD, 3); continue; }   // already offered
+    if (offered) { roundBox(x + 4, y + 4, BAG_SLOT - 8, BAG_SLOT - 8, 8, C_BG, 0.5f); continue; }   // already offered
     hit(x, y, BAG_SLOT, BAG_SLOT, bagPicking ? actPickItem : actOpenItem, idx);
   }
-  for (int i = 0; i < 2; i++) disc(173.3f + i * 20.7f, 350.5f, i == bagPage ? 5.5f : 4.5f, i == bagPage ? C_GOLD : 0x3A3458);
-  // buttons: the frames and the BACK / TRADE labels are in the art
-  text(FONT_PXB24, bagPage ? "PREV" : "NEXT", 302, 404, 0xFFF4DA);
-  hit(247, 366, 109, 57, actBagPage);
+  for (int i = 0; i < 2; i++) kitCentered(i == bagPage ? UI_K_DOT_ON : UI_K_DOT_OFF, 174 + i * 20, 352);
   if (bagPicking) {
-    hit(11, 366, 111, 57, actPickBack);
-    fillRect(129, 366, 111, 57, 0x000000, 0.65f);   // no trading from inside the trade
+    kitButton(11, 368, 111, 60, "BACK", CB_DARK, actPickBack);
+    kitButton(129, 368, 111, 60, "TRADE", CB_OFF, actTradeOpen);   // no trading from inside the trade
   } else {
-    hit(11, 366, 111, 57, actGo, HOME);
-    hit(129, 366, 111, 57, actTradeOpen);
+    kitButton(11, 368, 111, 60, "BACK", CB_DARK, actGo, HOME);
+    kitButton(129, 368, 111, 60, "TRADE", CB_DARK, actTradeOpen);
   }
+  kitButton(247, 368, 110, 60, bagPage ? "PREV" : "NEXT", CB_DARK, actBagPage);
 }
 
 // ---------------------------------------------------------------- gear: what the hero wears (tap the hero)

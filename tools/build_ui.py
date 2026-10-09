@@ -222,10 +222,10 @@ add("BTN_GOLD", btn_gold, 556, 1038)
 # ---------------------------------------------------------------- UI kit (art/ui/kit): stretchable pieces
 # Each piece is shrunk to screen size, then only its corners and one middle row/column are kept: the game
 # draws it at any size by repeating the middle (uiDrawBox). Their insides are plain, so nothing shows.
-def kit_piece(name, img, box, corner=24):
+def kit_piece(name, img, box, corner=24, scale=SCALE):
     x0, y0, x1, y1 = box
     a = img[y0:y1, x0:x1].copy()
-    s = shrink(a)
+    s = shrink(a, scale)
     h, w = s.shape[:2]
     c = min(corner, w // 2 - 1, h // 2 - 1)
     cols = list(range(c)) + [w // 2] + list(range(w - c, w))
@@ -239,6 +239,24 @@ kit_piece("K_BTN_DARK", KA, (107, 659, 702, 831))
 kit_piece("K_BTN_GOLD", KA, (747, 659, 1341, 831))
 kit_piece("K_BTN_RED", KA, (107, 857, 702, 1029))
 kit_piece("K_BTN_OFF", KA, (747, 857, 1341, 1029))
+# second sheet: drawn with thinner rims, so it is shrunk less to match the first one
+KB = load("kit/kit_b.png")
+SB = SCALE * 11.5 / 8.5
+kit_piece("K_SLOT", KB, (50, 592, 268, 795), corner=22, scale=SB)
+kit_piece("K_SLOT_SEL", KB, (300, 590, 525, 798), corner=22, scale=SB)
+kit_piece("K_BAR", KB, (40, 892, 818, 983), corner=12, scale=26 / 91)
+def kit_fixed(name, img, box, height):   # pieces drawn at one size (not stretched)
+    x0, y0, x1, y1 = box
+    a = img[y0:y1, x0:x1].copy()
+    pieces.append((name, shrink(a, height / a.shape[0]), 0, 0))
+kit_fixed("K_ROUND", KB, (579, 535, 902, 845), 150)
+kit_fixed("K_ROUND_S", KB, (579, 535, 902, 845), 120)
+kit_fixed("K_ARROW_L", KB, (988, 606, 1127, 775), 50)
+kit_fixed("K_ARROW_R", KB, (1213, 606, 1353, 775), 50)
+kit_fixed("K_DOT_ON", KB, (852, 917, 901, 965), 13)
+kit_fixed("K_DOT_OFF", KB, (931, 917, 979, 965), 11)
+kit_fixed("K_TOGGLE_OFF", KB, (1027, 889, 1196, 996), 30)
+kit_fixed("K_TOGGLE_ON", KB, (1224, 889, 1400, 993), 30)
 
 # ---------------------------------------------------------------- icons (one picture each, cropped and shrunk to a fixed height)
 def icon(name, file, height, box=None):
@@ -252,6 +270,12 @@ icon("SHARD", "icon_shard.png", 30)
 # what the Craft screen shows in its round frame (order: weapon kinds as in the game, then armor and cape)
 for n in ("sword", "axe", "mace", "armor", "cape"):
     icon("ICON_" + n.upper(), f"icon_{n}.png", 0, box=62)
+
+# The full-screen mockups were cut up before the UI kit existed; the screens now use the kit, so only the
+# pieces still in use are kept (the mockups stay in art/ui/ as layout references).
+DROP = {"NAME", "BANNER", "XPBAR", "XPFILL", "CRAFT_BG", "CRAFT_ARROW_L", "CRAFT_ARROW_R", "EXPLORE_BG", "BAG_BG",
+        "CARD_BG", "BTN_DARK", "BTN_GOLD"}
+pieces = [pc for pc in pieces if pc[0] not in DROP]
 
 # ---------------------------------------------------------------- write
 with open(OUT, "w") as fh:
@@ -272,8 +296,6 @@ with open(OUT, "w") as fh:
     for n, s, x, y in pieces:
         fh.write(f"  {{ {s.shape[1]}, {s.shape[0]}, {x}, {y}, {s.size}, sizeof UI_Z_{n}, UI_Z_{n} }},   // {n}\n")
     fh.write("};\n")
-    fh.write("#define UI_EXPLORE_BAR_X0 %.1ff\n#define UI_EXPLORE_BAR_Y0 %.1ff\n#define UI_EXPLORE_BAR_X1 %.1ff\n#define UI_EXPLORE_BAR_Y1 %.1ff\n" % tuple(explore_bar))
-    fh.write(f"#define UI_CRAFT_CX {craft_geo['cx']:.1f}f\n#define UI_CRAFT_CY {craft_geo['cy']:.1f}f\n#define UI_CRAFT_R {craft_geo['r']:.1f}f\n")
 print("ui_data.h:", len(pieces), "pieces,", total // 1024, "KB")
 for n, s, x, y in pieces: print(f"  {n:12s} {s.shape[1]:3d}x{s.shape[0]:3d} at {x},{y}")
 
@@ -286,8 +308,4 @@ def preview(names, out):
     un[..., :3] = np.where(a > 0, un[..., :3] * 255 / np.maximum(a, 1), 0)
     cv.alpha_composite(Image.fromarray(un.clip(0, 255).astype(np.uint8), "RGBA"), (x, y))
   cv.resize((736, 896), Image.NEAREST).save(os.path.join(HERE, out))
-preview([n for n, *_ in pieces if not n.startswith(("CRAFT", "SPLASH"))], "ui_preview.png")
-preview(["CRAFT_BG", "CRAFT_ARROW_L", "CRAFT_ARROW_R"], "ui_preview_craft.png")
-preview(["EXPLORE_BG"], "ui_preview_explore.png")
-preview(["BAG_BG"], "ui_preview_bag.png")
-preview(["CARD_BG", "BTN_DARK", "BTN_GOLD"], "ui_preview_card.png")
+preview([n for n, *_ in pieces if not n.startswith(("SPLASH", "K_", "ICON"))], "ui_preview.png")
