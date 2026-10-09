@@ -422,6 +422,13 @@ static const float HERO_SHIFT = 62;   // hero moved right to free a column on th
 // Home: the hero, the name panel (top left), level and XP (top right), the three actions down the left side
 // and pop-ups at the bottom right. Art from art/ui/ (tools/build_ui.py); text drawn here.
 static const Rgb C_LAVENDER = 0xB4ABD2, C_OUTLINE = 0x120C1A;
+// the shards you have, in a screen's top right corner: icon, then the number ending at `right`
+// (the number shrinks when it would run past `left`, the end of the title panel)
+static void shardCount(const char* have, int right, int cy, int left) {
+  const Font& f = right - textWidth(FONT_PXB24, have) - 6 - uiW(UI_SHARD) >= left ? FONT_PXB24 : FONT_PXB16;
+  text(f, have, right, cy + (&f == &FONT_PXB24 ? 12 : 8), C_INK, RIGHT);
+  uiDraw(UI_SHARD, right - textWidth(f, have) - 6 - uiW(UI_SHARD), cy - uiH(UI_SHARD) / 2);
+}
 static void drawHome() {
   drawBackgroundAt(fb, SCREEN_W / 2 + HERO_SHIFT);
   ensureCharacter(true);
@@ -494,8 +501,7 @@ static void drawExplore() {
   char t[40];
   // top right: the shards you have
   char have[16]; fmtThousands(game.mats, have);
-  text(FONT_PXB24, have, 350, 60, C_INK, RIGHT);
-  uiDraw(UI_SHARD, 350 - textWidth(FONT_PXB24, have) - 8 - uiW(UI_SHARD), 50 - uiH(UI_SHARD) / 2);
+  shardCount(have, 350, 50, 222);
   // next find
   text(FONT_PXB16, done ? "NEXT XP" : "NEXT FIND", 37, 143, C_LAVENDER, LEFT);
   snprintf(t, sizeof t, "%lu STEPS", (unsigned long)(STEPS_PER_FIND - into));
@@ -530,7 +536,10 @@ static int craftMax() { int m = game.mats / CRAFT_MIN * CRAFT_MIN; return m > CR
 static void fitAmount() { int m = craftMax(); if (craftAmount > m) craftAmount = m; if (craftAmount < CRAFT_MIN) craftAmount = CRAFT_MIN; }
 static int craftKind = 0;   // Blacksmith: which weapon (sword, axe, ...)
 static void actKind(int d) { int n = weaponKindCount(); craftKind = (craftKind + d + n) % n; }
-static void actAmount(int d) { craftAmount += d * CRAFT_MIN; if (craftAmount > CRAFT_MAX) craftAmount = CRAFT_MIN; else if (craftAmount < CRAFT_MIN) craftAmount = craftMax() >= CRAFT_MIN ? craftMax() : CRAFT_MIN; fitAmount(); }
+static uint32_t amountNoteAt = 0;   // when "+" was tapped without enough shards (shows a note for a moment)
+static void actAmount(int d) {
+  if (d > 0 && craftAmount + CRAFT_MIN > craftMax() && craftAmount < CRAFT_MAX) { amountNoteAt = lastNow ? lastNow : 1; return; }
+  craftAmount += d * CRAFT_MIN; if (craftAmount > CRAFT_MAX) craftAmount = CRAFT_MIN; else if (craftAmount < CRAFT_MIN) craftAmount = craftMax() >= CRAFT_MIN ? craftMax() : CRAFT_MIN; fitAmount(); }
 static void actCraft(int) {
   int lv = 0, s = gameCraft(game, craftType(), craftKind, craftAmount, &lv);
   if (s < 0) return;
@@ -581,8 +590,7 @@ static void drawCraft(uint32_t now) {
   text(FONT_PXB16, t, 32, 94, C_LAVENDER, LEFT);
   // top right: the shards you have (and the weapon kind)
   char have[16]; fmtThousands(game.mats, have);
-  uiDraw(UI_SHARD, 352 - textWidth(FONT_PXB24, have) - 8 - uiW(UI_SHARD), 42 - uiH(UI_SHARD) / 2);   // right beside the number
-  text(FONT_PXB24, have, 352, 54, C_GOLD, RIGHT);
+  shardCount(have, 352, 42, 226);
   if (craftType() == IT_WEAPON) {
     char up[16]; strncpy(up, weaponKindName(craftKind), 15); up[15] = 0; for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
     text(FONT_PXB16, up, 352, 90, C_GOLD, RIGHT);
@@ -603,7 +611,9 @@ static void drawCraft(uint32_t now) {
   text(FONT_PXB16, "SHARDS", SCREEN_W / 2, 296, C_LAVENDER);
   hit(14, 214, 170, 96, actAmount, -1); hit(184, 214, 170, 96, actAmount, 1);
   bool full = bagFreeSlot(game) < 0, poor = game.mats < CRAFT_MIN;
+  bool note = amountNoteAt && lastNow - amountNoteAt < 1800;
   if (poor) text(FONT_PXB16, "WALK TO FIND SHARDS", SCREEN_W / 2, 336, C_DANGER);
+  else if (note) { snprintf(t, sizeof t, "YOU HAVE %u SHARDS", (unsigned)game.mats); text(FONT_PXB16, t, SCREEN_W / 2, 336, C_DANGER); }
   else if (full) text(FONT_PXB16, "YOUR BAG IS FULL", SCREEN_W / 2, 336, C_DANGER);
   else {
     int r = craftRolls(craftAmount);
@@ -1238,6 +1248,7 @@ bool appTick(uint32_t now) {
   lastNow = now;
   if (screen == TRADE || tState != T_OFF) { bool r = tradeTick(now); if (screen == TRADE && !ambient && overlay == NONE && (r || tState == T_SEARCH)) return true; }
   if (ambient || overlay != NONE) return false;
+  if (screen == CRAFT && amountNoteAt && now - amountNoteAt >= 1800) { amountNoteAt = 0; return true; }   // the note goes away
   if (screen == CRAFT && craftPhase == 1) {
     if (now - craftAt >= CRAFT_MS) craftPhase = 2;
     return true;
