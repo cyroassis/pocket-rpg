@@ -485,38 +485,40 @@ static void drawHome() {
 }
 
 // ---------------------------------------------------------------- explore: what walking brings
+// art from art/ui/explore.png (tools/build_ui.py), with the changing parts drawn here
 static void drawExplore() {
-  drawBackground(fb);
-  titleBar("EXPLORE");
+  uiDraw(UI_EXPLORE_BG, 0, 0);
   bool done = game.finds >= DAILY_FINDS;
   uint32_t into = stepsToday >= game.counted ? stepsToday - game.counted : 0;
   if (into > STEPS_PER_FIND) into = STEPS_PER_FIND;
-  roundBox(10, 66, 348, 118, 14, C_PANEL, 1, C_LINE, 2);
-  text(FONT_PX16, done ? "NEXT XP" : "NEXT FIND", 26, 96, C_MUTED, LEFT);
-  char t[40]; snprintf(t, sizeof t, "%lu steps", (unsigned long)(STEPS_PER_FIND - into));
-  text(FONT_PX24, t, 342, 98, C_GOLD, RIGHT);
-  roundBox(26, 114, 316, 20, 10, C_PANEL2, 1);
-  if (into) roundBox(26, 114, 20 + 296.f * into / STEPS_PER_FIND, 20, 10, C_GOLD, 1);
-  text(FONT_PX16, done ? "Shards done for today" : "+1 shard \xC2\xB7 +5 XP", SCREEN_W / 2, 166, C_MUTED);
+  char t[40];
+  // top right: the shards you have
+  char have[16]; fmtThousands(game.mats, have);
+  text(FONT_PXB24, have, 350, 60, C_INK, RIGHT);
+  uiDraw(UI_SHARD, 350 - textWidth(FONT_PXB24, have) - 8 - uiW(UI_SHARD), 50 - uiH(UI_SHARD) / 2);
+  // next find
+  text(FONT_PXB16, done ? "NEXT XP" : "NEXT FIND", 37, 143, C_LAVENDER, LEFT);
+  snprintf(t, sizeof t, "%lu STEPS", (unsigned long)(STEPS_PER_FIND - into));
+  text(FONT_PXB24, t, 331, 146, C_GOLD, RIGHT);
+  float bx0 = UI_EXPLORE_BAR_X0 + 1, by0 = UI_EXPLORE_BAR_Y0 + 1, bx1 = UI_EXPLORE_BAR_X1 - 1, by1 = UI_EXPLORE_BAR_Y1 - 1, bh = by1 - by0;
+  if (into) { float w = (bx1 - bx0) * into / STEPS_PER_FIND; if (w < bh) w = bh; roundBox(bx0, by0, w, bh, bh / 2, C_GOLD, 1); }
+  text(FONT_PXB16, done ? "SHARDS DONE FOR TODAY" : "+1 SHARD  +5 XP", SCREEN_W / 2, 204, C_LAVENDER);
   // today
-  roundBox(10, 194, 169, 92, 14, C_PANEL, 1, C_LINE, 2);
-  roundBox(189, 194, 169, 92, 14, C_PANEL, 1, C_LINE, 2);
-  text(FONT_PX16, "FINDS TODAY", 94, 222, C_MUTED);
   snprintf(t, sizeof t, "%d/%d", game.finds, DAILY_FINDS);
-  text(FONT_PX32, t, 94, 268, done ? C_GOLD : C_INK);
-  text(FONT_PX16, "XP TODAY", 273, 222, C_MUTED);
+  text(FONT_PX32, t, 97, 293, C_GOLD);
   snprintf(t, sizeof t, "+%lu", (unsigned long)game.xpDay);
-  text(FONT_PX32, t, 273, 268, C_GOLD);
-  // the latest find
+  text(FONT_PX32, t, 272, 293, C_GOLD);
+  // the latest find, and all the steps ever
   if (recentCount) {
     const FindEvent& e = recent[recentCount - 1];
-    if (e.kind == F_ITEM) { char nm[28]; itemName(e.item, nm, sizeof nm); snprintf(t, sizeof t, "Found: %s", nm); text(FONT_PX16, t, SCREEN_W / 2, 320, rarityRgb(e.item.tier)); }
-    else text(FONT_PX16, e.kind == F_MATERIAL ? "Last find: +1 shard" : "Last: +5 XP", SCREEN_W / 2, 320, C_MUTED);
-  } else text(FONT_PX16, "Walk to find shards", SCREEN_W / 2, 320, C_MUTED);
+    if (e.kind == F_ITEM) { char nm[28]; itemName(e.item, nm, sizeof nm); for (char* q = nm; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+      snprintf(t, sizeof t, "FOUND %s", nm); text(FONT_PXB16, t, SCREEN_W / 2, 337, rarityRgb(e.item.tier)); }
+    else text(FONT_PXB16, e.kind == F_MATERIAL ? "LAST FIND: +1 SHARD" : "LAST: +5 XP", SCREEN_W / 2, 337, C_INK);
+  } else text(FONT_PXB16, "WALK TO FIND SHARDS", SCREEN_W / 2, 337, C_INK);
   char tot[16]; fmtThousands(totalSteps(game), tot);
-  snprintf(t, sizeof t, "Total steps %s", tot);
-  text(FONT_PX16, t, SCREEN_W / 2, 348, C_MUTED);
-  button(10, NAV_Y, 348, NAV_H, "Back", GHOST, actGo, HOME);
+  snprintf(t, sizeof t, "TOTAL STEPS %s", tot);
+  text(FONT_PXB16, t, SCREEN_W / 2, 360, C_LAVENDER);
+  hit(13, 369, 343, 61, actGo, HOME);   // Back (its label is in the art)
 }
 
 // ---------------------------------------------------------------- craft

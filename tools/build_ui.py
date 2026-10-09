@@ -166,6 +166,32 @@ add("CRAFT_ARROW_R", arrow_r, 784, 900 - 900 + 421)
 craft_geo = dict(cx=cx0 * SCALE, cy=cy0 * SCALE, r=r_in * SCALE)
 print("craft frame:", {k: round(v, 1) for k, v in craft_geo.items()})
 
+# ---------------------------------------------------------------- explore screen (full-screen mockup)
+E = load("explore.png")
+bg = E[5, 5].copy()
+def e_flat(x0, y0, x1, y1): E[y0:y1, x0:x1] = bg
+def e_rows(x0, y0, x1, y1, sample):
+    for y in range(y0, y1):
+        E[y, x0:x1] = np.median(np.concatenate([E[y, a:b] for a, b in sample]), axis=0)
+e_flat(880, 95, 1100, 205)                                    # the corner: shards you have
+e_rows(100, 376, 1036, 460, [(365, 600)])                     # NEXT XP / 200 STEPS
+e_rows(200, 562, 940, 638, [(80, 195), (945, 1040)])          # SHARDS DONE FOR TODAY
+e_rows(118, 812, 484, 914, [(75, 115), (488, 520)])           # 20/20
+e_rows(640, 812, 1000, 914, [(615, 638), (1003, 1050)])       # +790
+e_flat(230, 985, 910, 1125)                                   # the two lines under the panels
+# the progress bar's inside: walk in from its ends along the middle row until the colour settles
+bl = lum(E)
+mid = (465 + 552) // 2
+row = bl[mid, 105:1033]
+inner = np.where(np.abs(row - np.median(row)) < 6)[0]
+bx0, bx1 = 105 + inner[0], 105 + inner[-1] + 1
+col = bl[465:552, (bx0 + bx1) // 2]
+innery = np.where(np.abs(col - np.median(col)) < 6)[0]
+by0, by1 = 465 + innery[0], 465 + innery[-1] + 1
+add("EXPLORE_BG", E, 0, 0)
+explore_bar = [v * SCALE for v in (bx0, by0, bx1, by1)]
+print("explore bar:", [round(v, 1) for v in explore_bar])
+
 # ---------------------------------------------------------------- icons (one picture each, cropped and shrunk to a fixed height)
 def icon(name, file, height, box=None):
     """Cropped to the picture; shrunk to `height`, or to fit a box x box square."""
@@ -198,6 +224,7 @@ with open(OUT, "w") as fh:
     for n, s, x, y in pieces:
         fh.write(f"  {{ {s.shape[1]}, {s.shape[0]}, {x}, {y}, {s.size}, sizeof UI_Z_{n}, UI_Z_{n} }},   // {n}\n")
     fh.write("};\n")
+    fh.write("#define UI_EXPLORE_BAR_X0 %.1ff\n#define UI_EXPLORE_BAR_Y0 %.1ff\n#define UI_EXPLORE_BAR_X1 %.1ff\n#define UI_EXPLORE_BAR_Y1 %.1ff\n" % tuple(explore_bar))
     fh.write(f"#define UI_CRAFT_CX {craft_geo['cx']:.1f}f\n#define UI_CRAFT_CY {craft_geo['cy']:.1f}f\n#define UI_CRAFT_R {craft_geo['r']:.1f}f\n")
 print("ui_data.h:", len(pieces), "pieces,", total // 1024, "KB")
 for n, s, x, y in pieces: print(f"  {n:12s} {s.shape[1]:3d}x{s.shape[0]:3d} at {x},{y}")
@@ -213,3 +240,4 @@ def preview(names, out):
   cv.resize((736, 896), Image.NEAREST).save(os.path.join(HERE, out))
 preview([n for n, *_ in pieces if not n.startswith(("CRAFT", "SPLASH"))], "ui_preview.png")
 preview(["CRAFT_BG", "CRAFT_ARROW_L", "CRAFT_ARROW_R"], "ui_preview_craft.png")
+preview(["EXPLORE_BG"], "ui_preview_explore.png")
