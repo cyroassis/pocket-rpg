@@ -314,7 +314,8 @@ static void drawProf() {
     // three wide cards: icon on the left, name and what it makes on the right
     float x = 10, y = 82 + i * 89, w = 348, h = 82; bool on = hero.prof == i;
     uiDrawBox(on ? UI_K_SLOT_SEL : UI_K_PANEL_S, (int)x, (int)y, (int)w, (int)h);
-    icon(i, x + 52, y + h / 2 + 2, on ? C_GOLD : C_INK, on ? C_PANEL2 : C_PANEL);
+    static const int PROF_ICON[PROFESSION_COUNT] = { UI_ICON_SWORD, UI_ICON_ARMOR, UI_ICON_CAPE };   // what each one makes
+    kitCentered(PROF_ICON[i], x + 52, y + h / 2);
     char up[16]; strncpy(up, PROFESSION_NAMES[i], 15); up[15] = 0; for (char* c = up; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
     text(FONT_PX24, up, (int)(x + 100), (int)(y + 37), on ? C_GOLD : C_INK, LEFT);
     text(FONT_PX16, PROFESSION_MAKES[i], (int)(x + 100), (int)(y + 60), C_MUTED, LEFT);
