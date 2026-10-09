@@ -44,7 +44,13 @@ static void cols(int id, int sx0, int n, int dx, int dy) {
 void uiDraw(int id, int x, int y) { cols(id, 0, UI_SPRITES[id].w, x, y); }
 void uiDrawWide(int id, int x, int y, int w) {
   int sw = UI_SPRITES[id].w;
-  if (w <= sw) { uiDraw(id, x, y); return; }
+  if (w == sw) { uiDraw(id, x, y); return; }
+  if (w < sw) {   // narrower: the middle columns are left out
+    int l = w / 2;
+    cols(id, 0, l, x, y);
+    cols(id, sw - (w - l), w - l, x + l, y);
+    return;
+  }
   int half = sw / 2;
   cols(id, 0, half, x, y);
   for (int i = 0; i < w - sw; i++) cols(id, half, 1, x + half + i, y);

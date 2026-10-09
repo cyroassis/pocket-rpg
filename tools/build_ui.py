@@ -204,6 +204,21 @@ g_rows(495, 1055, 640, 1110, [(400, 480), (660, 740)])          # page dots
 g_rows(805, 1188, 1062, 1250, [(790, 804), (1064, 1075)])       # PAGE 2 (changes with the page)
 add("BAG_BG", G, 0, 0)
 
+# ---------------------------------------------------------------- item card (new item / an item from the bag)
+# The card's frame is the background; everything inside is drawn by the game. The two buttons are cut out
+# (dark and gold, labels wiped) so screens can use any number of them.
+I = load("item.png")
+def i_rows(img, x0, y0, x1, y1, sample):
+    for y in range(y0, y1):
+        img[y, x0:x1] = np.median(np.concatenate([img[y, a:b] for a, b in sample]), axis=0)
+btn_dark = I[1038:1258, 82:530].copy(); btn_gold = I[1038:1258, 556:1052].copy()
+i_rows(btn_dark, 140, 66, 312, 148, [(60, 130), (320, 400)])   # OK
+i_rows(btn_gold, 108, 66, 402, 148, [(50, 104), (406, 440)])   # EQUIP
+I[100:1263, 80:1059] = np.median(I[990:1030, 120:1000].reshape(-1, 4), axis=0)   # the inside: plain
+add("CARD_BG", I, 0, 0)
+add("BTN_DARK", btn_dark, 82, 1038)
+add("BTN_GOLD", btn_gold, 556, 1038)
+
 # ---------------------------------------------------------------- icons (one picture each, cropped and shrunk to a fixed height)
 def icon(name, file, height, box=None):
     """Cropped to the picture; shrunk to `height`, or to fit a box x box square."""
@@ -254,3 +269,4 @@ preview([n for n, *_ in pieces if not n.startswith(("CRAFT", "SPLASH"))], "ui_pr
 preview(["CRAFT_BG", "CRAFT_ARROW_L", "CRAFT_ARROW_R"], "ui_preview_craft.png")
 preview(["EXPLORE_BG"], "ui_preview_explore.png")
 preview(["BAG_BG"], "ui_preview_bag.png")
+preview(["CARD_BG", "BTN_DARK", "BTN_GOLD"], "ui_preview_card.png")

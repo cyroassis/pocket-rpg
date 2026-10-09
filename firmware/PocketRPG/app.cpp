@@ -547,6 +547,35 @@ static void actCraft(int) {
   levelBanner(lv);
   platformSaveGame(game);
 }
+// ---------------------------------------------------------------- item card (art/ui/item.png): new item, or an item tapped
+// in the bag, the gear or a trade. The frame and button shapes are art; the rest is drawn here.
+enum CardBtn { CB_DARK, CB_GOLD, CB_DANGER, CB_OFF };
+static const float CARD_CX = 183.2f, CARD_CY = 154.8f, CARD_R = 69.8f;
+static void cardBase(const Item& it, const char* title) {
+  uiDraw(UI_CARD_BG, 0, 0);
+  textOutlined(FONT_PXB24, title, SCREEN_W / 2, 68, 0xFFE9A8, C_OUTLINE, 2);
+  Rgb rc = rarityRgb(it.tier);
+  disc(CARD_CX, CARD_CY, CARD_R, rc, 0.16f); ring(CARD_CX, CARD_CY, CARD_R - 1.5f, 3, rc);
+  itemIcon(it, CARD_CX, CARD_CY, 116, C_PANEL, false);
+  char nm[28], tl[40];
+  itemName(it, nm, sizeof nm); for (char* q = nm; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+  tierLine(it, tl, sizeof tl);
+  text(textWidth(FONT_PXB24, nm) <= 300 ? FONT_PXB24 : FONT_PXB16, nm, SCREEN_W / 2, 259, 0xFFF4DA);
+  text(FONT_PXB16, tl, SCREEN_W / 2, 287, rc);
+}
+static void cardLine(int i, const char* s, Rgb c) { text(i ? FONT_PX16 : FONT_PXB16, s, SCREEN_W / 2, i ? 329 : 312, c); }
+// buttons in a row along the bottom of the card: n of them, the i-th one
+static void cardButton(int i, int n, const char* label, int kind, Action fn, int arg = 0) {
+  const int left = 27, right = 341, gap = 8;
+  int w = (right - left - gap * (n - 1)) / n, x = left + i * (w + gap);
+  int id = kind == CB_GOLD ? UI_BTN_GOLD : UI_BTN_DARK, y = uiY(UI_BTN_DARK), h = uiH(id);
+  uiDrawWide(id, x, y, w);
+  bool big = textWidth(FONT_PXB24, label) <= w - 30;
+  Rgb c = kind == CB_GOLD ? 0x1A1206 : kind == CB_DANGER ? C_DANGER : kind == CB_OFF ? C_DIM : 0xFFF4DA;
+  text(big ? FONT_PXB24 : FONT_PXB16, label, x + w / 2, y + h / 2 + (big ? 9 : 6), c);
+  if (kind != CB_OFF) hit(x, y, w, h, fn, arg);
+}
+
 static void actCraftDone(int) { craftPhase = 0; fitAmount(); }
 static void actEquipCrafted(int) { if (gameEquip(game, craftSlot)) platformSaveGame(game); craftPhase = 0; fitAmount(); }
 static void actCraftToBag(int) { craftPhase = 0; fitAmount(); go(BAG); }
@@ -567,20 +596,13 @@ static void drawCraft(uint32_t now) {
   }
   if (craftPhase == 2) {   // the new item
     const Item& it = game.bag[craftSlot];
-    Rgb rc = rarityRgb(it.tier);
-    char nm[28], tl[40];
-    itemName(it, nm, sizeof nm); tierLine(it, tl, sizeof tl);
-    text(FONT_PX24, "NEW ITEM", SCREEN_W / 2, 46, C_GOLD);
-    disc(184, 146, 66, rc, 0.16f); ring(184, 146, 66, 3, rc);
-    itemIcon(it, 184, 146, 124, C_BG, false);
-    text(FONT_PX24, nm, SCREEN_W / 2, 252, C_INK);
-    text(FONT_PX16, tl, SCREEN_W / 2, 280, rc);
+    cardBase(it, "NEW ITEM");
     bool ok = canEquip(game, it);
-    char lk[32]; if (ok) snprintf(lk, sizeof lk, "Fits your level"); else snprintf(lk, sizeof lk, "Needs level %d", it.tier);
-    text(FONT_PX16, lk, SCREEN_W / 2, 310, ok ? C_MUTED : C_DANGER);
-    button(10, NAV_Y, 120, NAV_H, "OK", GHOST, actCraftDone);
-    if (ok) button(140, NAV_Y, 218, NAV_H, "Equip", PRIMARY, actEquipCrafted);
-    else button(140, NAV_Y, 218, NAV_H, "Bag", GHOST, actCraftToBag);
+    char lk[32]; if (ok) snprintf(lk, sizeof lk, "FITS YOUR LEVEL"); else snprintf(lk, sizeof lk, "NEEDS LEVEL %d", it.tier);
+    cardLine(0, lk, ok ? C_LAVENDER : C_DANGER);
+    cardButton(0, 2, "OK", CB_DARK, actCraftDone);
+    if (ok) cardButton(1, 2, "EQUIP", CB_GOLD, actEquipCrafted);
+    else cardButton(1, 2, "BAG", CB_DARK, actCraftToBag);
     return;
   }
   // the picker: art from art/ui/craft.png (tools/build_ui.py), with the changing parts drawn here
@@ -729,29 +751,23 @@ static void drawItemCard() {
   const Item& it = itemFrom == FROM_GEAR ? game.gear[itemSel] : itemFrom == FROM_TRADE ? tPeerOffer[itemSel] : game.bag[itemSel];
   const bool itemIsGear = itemFrom == FROM_GEAR;
   if (!it.tier) { overlay = NONE; return; }
-  fillRect(0, 0, SCREEN_W, SCREEN_H, C_BG, 0.86f);
-  Rgb rc = rarityRgb(it.tier);
-  roundBox(10, 14, 348, 324, 16, C_PANEL, 1, rc, 2);
-  disc(184, 92, 54, rc, 0.14f); ring(184, 92, 54, 2, rc);
-  itemIcon(it, 184, 92, 104, C_PANEL, false);
-  char nm[28], tl[40], st[40];
-  itemName(it, nm, sizeof nm); tierLine(it, tl, sizeof tl);
-  text(FONT_PX24, nm, SCREEN_W / 2, 186, C_INK);
-  text(FONT_PX16, tl, SCREEN_W / 2, 214, rc);
+  static const char* const TITLES[3] = { "WEAPON", "ARMOR", "CAPE" };
+  cardBase(it, itemFrom == FROM_TRADE ? "THEIR ITEM" : it.type < 3 ? TITLES[it.type] : "ITEM");
+  char st[40];
   bool ok = canEquip(game, it);
-  if (itemIsGear) { snprintf(st, sizeof st, "Worn by %s", hero.name); text(FONT_PX16, st, SCREEN_W / 2, 252, C_GOLD); }
-  else if (ok) text(FONT_PX16, "Fits your level", SCREEN_W / 2, 252, C_MUTED);
-  else { snprintf(st, sizeof st, "Needs level %d", it.tier); text(FONT_PX16, st, SCREEN_W / 2, 252, C_DANGER); }
-  if (itemFrom == FROM_TRADE) { button(10, NAV_Y, 348, NAV_H, "Back", GHOST, actItemBack); return; }   // the other hero's item: look only
-  if (!itemIsGear) { snprintf(st, sizeof st, "Salvage: +%d shards", salvageValue(it)); text(FONT_PX16, st, SCREEN_W / 2, 300, C_MUTED); }
-  else if (bagFreeSlot(game) < 0) text(FONT_PX16, "Bag full: no room to take off", SCREEN_W / 2, 300, C_DANGER);
+  if (itemIsGear) { snprintf(st, sizeof st, "WORN BY %s", hero.name); for (char* q = st; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32; cardLine(0, st, C_GOLD); }
+  else if (ok) cardLine(0, "FITS YOUR LEVEL", C_LAVENDER);
+  else { snprintf(st, sizeof st, "NEEDS LEVEL %d", it.tier); cardLine(0, st, C_DANGER); }
+  if (itemFrom == FROM_TRADE) { cardButton(0, 1, "BACK", CB_DARK, actItemBack); return; }   // the other hero's item: look only
+  if (!itemIsGear) { snprintf(st, sizeof st, "Salvage gives +%d shards", salvageValue(it)); cardLine(1, st, C_MUTED); }
+  else if (bagFreeSlot(game) < 0) cardLine(1, "Bag full: no room to take off", C_DANGER);
   if (itemIsGear) {
-    button(10, NAV_Y, 120, NAV_H, "Back", GHOST, actItemBack);
-    button(140, NAV_Y, 218, NAV_H, "Take off", bagFreeSlot(game) < 0 ? DISABLED : GHOST, actItemTakeOff);
+    cardButton(0, 2, "BACK", CB_DARK, actItemBack);
+    cardButton(1, 2, "TAKE OFF", bagFreeSlot(game) < 0 ? CB_OFF : CB_DARK, actItemTakeOff);
   } else {
-    button(10, NAV_Y, 100, NAV_H, "Back", GHOST, actItemBack);
-    button(118, NAV_Y, 112, NAV_H, salvageArmed ? "Sure?" : "Salvage", salvageArmed ? DANGER : GHOST, actItemSalvage);
-    button(238, NAV_Y, 120, NAV_H, "Equip", ok ? PRIMARY : DISABLED, actItemEquip);
+    cardButton(0, 3, "BACK", CB_DARK, actItemBack);
+    cardButton(1, 3, salvageArmed ? "SURE?" : "SALVAGE", salvageArmed ? CB_DANGER : CB_DARK, actItemSalvage);
+    cardButton(2, 3, "EQUIP", ok ? CB_GOLD : CB_OFF, actItemEquip);
   }
 }
 

@@ -8,7 +8,7 @@ int uiH(int id);
 int uiX(int id);   // position in the mockup
 int uiY(int id);
 void uiDraw(int id, int x, int y);
-// Panels that hold text of any length: wider than the art, the middle column repeats. w <= art width: as is.
+// Panels that hold text of any length: wider than the art, the middle column repeats; narrower, the middle is left out.
 void uiDrawWide(int id, int x, int y, int w);
 // Repeats the piece's first column across w pixels (bar fills).
 void uiDrawCols(int id, int x, int y, int w);
