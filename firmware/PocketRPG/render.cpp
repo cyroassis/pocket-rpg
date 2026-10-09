@@ -185,6 +185,7 @@ static const uint8_t* layerBytes(const LayerDef& L) {
 // hideTop/hx0/hx1: pixels from row hideTop down, between columns hx0..hx1, are left out (the body's own
 // hand and arm under the fist of a weapon drawn without a hand)
 static int hideBottom = SCREEN_H;   // the arm under the fist ends here (the body's wrist): the legs below stay
+static int handMaskTop = 0;         // first row of the body's own hand
 static void drawLayer(const LayerDef& L, int handCut, bool hideHand, int hideTop = SCREEN_H, int hx0 = 0, int hx1 = -1, bool skinOnly = false,
                       const int16_t* maskRows = nullptr) {
   int k = 0;
@@ -204,8 +205,9 @@ static void drawLayer(const LayerDef& L, int handCut, bool hideHand, int hideTop
       if (hx1 >= hx0 && (!skinOnly || grp == 2)) {
         int y = k / SCREEN_W, x = k % SCREEN_W;
         if (y >= hideTop && y <= hideBottom) {
-          if (maskRows) { if (maskRows[y * 2] >= 0 && x >= maskRows[y * 2] - 2 && x <= maskRows[y * 2 + 1] + 2) continue; }   // armor: only over the body's hand
-          else if (x >= hx0 && x <= hx1) continue;
+          // the body's own hand (its outline, row by row), and above it the wrist inside the fist's columns
+          if (maskRows && maskRows[y * 2] >= 0) { if (x >= maskRows[y * 2] - 1 && x <= maskRows[y * 2 + 1] + 1) continue; }
+          else if (maskRows && y < handMaskTop && x >= hx0 && x <= hx1) continue;
         }
       }
       blend(k, c[0], c[1], c[2], al);
@@ -335,7 +337,8 @@ void renderCharacterLayers(const Look& look, float* work) {
     fist = handFront(&hx0, &hx1);
     if (fist) { hideTop = fist->handTop; hx0 -= 8; hx1 += 4; } else hx1 = -1;
   }
-  hideBottom = body.wrist + 4;
+  hideBottom = body.wrist + 2;
+  handMaskTop = SCREEN_H; if (body.handRows) for (int y = 0; y < SCREEN_H; y++) if (body.handRows[y * 2] >= 0) { handMaskTop = y; break; }
   paint.skin = makeSkin(body.skinBase, SKIN_TARGET[look.skin % 6]);
   float* scratch = work + 4 * N;  // glow scratch: N + SCREEN_H floats
 
@@ -351,7 +354,7 @@ void renderCharacterLayers(const Look& look, float* work) {
   // body (eyes = group A, underwear = group B)
   gradLUT(EYE_RGB[look.eye % 9], body.mid3, paint.a);
   gradLUT(0xA8A8A8, body.mid4, paint.b);
-  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr && !fist, hideTop, hx0, hx1, true);   // only the skin of the arm
+  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr && !fist, hideTop, hx0, hx1, true, body.handRows);   // only the skin of the hand
   // armor
   if (armor) {
     const TierColor& tc = ARMOR_TIERS[look.armorTier - 1];
