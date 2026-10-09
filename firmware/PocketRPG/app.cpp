@@ -457,7 +457,7 @@ static void drawHome() {
   int right = bx + uiW(UI_XPBAR) - 6;
   textOutlined(FONT_PXB16, "LEVEL", right, 58, C_LAVENDER, C_OUTLINE, 2, RIGHT);
   char ln[8]; snprintf(ln, sizeof ln, "%d", lv);
-  textOutlined(FONT_PXB48, ln, right, 98, C_GOLD, C_OUTLINE, 3, RIGHT);
+  textOutlined(FONT_PX32, ln, right, 88, C_GOLD, C_OUTLINE, 2, RIGHT);
 
   // actions
   const int ids[3] = { UI_BTN_CRAFT, UI_BTN_EXPLORE, UI_BTN_BAG };
@@ -1170,6 +1170,14 @@ static void drawReset() {
 }
 
 // ---------------------------------------------------------------- public
+void appSplash(uint16_t* f) {
+  gfxTarget(f);
+  fillRect(0, 0, SCREEN_W, SCREEN_H, 0x000000);
+  uiDraw(UI_SPLASH, uiX(UI_SPLASH), uiY(UI_SPLASH));
+  uiFree(UI_SPLASH);
+  char v[16]; snprintf(v, sizeof v, "VERSION %d", FW_VERSION);
+  text(FONT_PX16, v, SCREEN_W / 2, 426, C_DIM);
+}
 void appBegin(uint16_t* f, float* w, const Hero* saved, const Settings& s, const Game* savedGame) {
   fb = f; work = w; gfxTarget(fb);
   settings = s;

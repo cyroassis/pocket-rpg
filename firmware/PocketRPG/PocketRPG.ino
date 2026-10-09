@@ -529,6 +529,15 @@ void setup() {
   }
 
   step("memory");
+  // splash while the rest starts (turned like the game screen if Upside down is on)
+  {
+    Settings early = loadSettings();
+    appSplash(fb);
+    if (early.upsideDown) std::reverse(fb, fb + SCREEN_W * SCREEN_H);
+    gfx->draw16bitRGBBitmap(0, 0, fb, SCREEN_W, SCREEN_H);
+    gfx->setBrightness(BRIGHTNESS_LEVELS[early.brightness > 2 ? 1 : early.brightness]);
+  }
+  uint32_t splashAt = millis();
   rtcOk = rtc.begin(Wire, IIC_SDA, IIC_SCL);
   Wire.setClock(400000);
   if (rtcOk && rtc.getDateTime().getYear() < 2026) setClockFromBuild();
@@ -550,6 +559,7 @@ void setup() {
   updateSteps();
   step("steps");
   readBattery();
+  while (millis() - splashAt < 1800) delay(10);   // let the splash be seen
   lastActivity = millis();
   redraw();
   step("first screen drawn");

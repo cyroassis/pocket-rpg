@@ -23,6 +23,7 @@ struct Settings {
 extern const uint16_t TIMEOUT_SECONDS[3];   // 15, 30, 60
 extern const uint8_t BRIGHTNESS_LEVELS[3];  // panel brightness for Low, Medium, High
 
+void appSplash(uint16_t* fb);   // the start-up picture, drawn into fb (before appBegin)
 void appBegin(uint16_t* fb, float* work, const Hero* saved, const Settings& s, const Game* savedGame);  // saved = nullptr starts the setup
 bool appTap(int x, int y);       // a finished tap; true = the screen changed
 bool appSwipe(int dir);          // a sideways swipe: +1 = finger moved left (next), -1 = right; true = changed

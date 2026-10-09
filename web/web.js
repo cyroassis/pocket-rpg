@@ -48,6 +48,9 @@ class Board {
     const { instance } = await WebAssembly.instantiate(WASM_BIN, { env, wasi_snapshot_preview1: wasi });
     this.ex = instance.exports;
     this.ex._initialize();
+    this.ex.web_splash(); this.blit();   // the start-up picture, like the board
+    this.el.querySelector(".loading").hidden = true;
+    const splashUntil = performance.now() + 1500;
     const load = (kind, ptr, size, oldSize) => {
       const s = store.get(this.keys[kind]); if (!s) return false;
       const d = fromB64(s); if (d.length !== size && d.length !== oldSize) return false;
@@ -61,7 +64,7 @@ class Board {
     this.ex.web_set_battery(80, 0, 0);
     this.brightness = this.ex.web_brightness();
     this.loadSteps(); this.feedSteps();
-    this.el.querySelector(".loading").hidden = true;
+    await new Promise(r => setTimeout(r, Math.max(0, splashUntil - performance.now())));
     this.wire();
     this.setState("on");
   }
@@ -92,6 +95,9 @@ class Board {
   draw() {
     if (this.state === "off") { this.ctx.fillStyle = "#000"; this.ctx.fillRect(0, 0, W, H); return; }
     this.ex.web_draw(now());
+    this.blit();
+  }
+  blit() {
     const fb = new Uint16Array(this.ex.memory.buffer, this.ex.web_fb(), W * H), d = this.img.data;
     for (let i = 0, j = 0; i < W * H; i++, j += 4) {
       const c = fb[i];

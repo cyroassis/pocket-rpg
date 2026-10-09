@@ -43,8 +43,10 @@ EXPORT(web_game_size) int web_game_size() { return sizeof(Game); }
 EXPORT(web_game_old_size) int web_game_old_size() { return GAME_OLD_SIZE; }
 EXPORT(web_fb) void* web_fb() { return fb; }
 
+static void buffers() { if (!fb) { fb = (uint16_t*)malloc(SCREEN_W * SCREEN_H * 2); work = (float*)malloc(sizeof(float) * RENDER_WORK_FLOATS); } }
+EXPORT(web_splash) void web_splash() { buffers(); appSplash(fb); }
 EXPORT(web_begin) void web_begin(int haveHero, int haveGame) {
-  if (!fb) { fb = (uint16_t*)malloc(SCREEN_W * SCREEN_H * 2); work = (float*)malloc(sizeof(float) * RENDER_WORK_FLOATS); }
+  buffers();
   appBegin(fb, work, haveHero ? &heroBuf : nullptr, settingsBuf, haveHero && haveGame ? &gameBuf : nullptr);
 }
 EXPORT(web_tap) int web_tap(int x, int y) { return appTap(x, y); }

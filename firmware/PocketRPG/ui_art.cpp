@@ -43,3 +43,4 @@ void uiDrawWide(int id, int x, int y, int w) {
   cols(id, half, sw - half, x + half + (w - sw), y);
 }
 void uiDrawCols(int id, int x, int y, int w) { for (int i = 0; i < w; i++) cols(id, 0, 1, x + i, y); }
+void uiFree(int id) { if (id >= 0 && id < UI_COUNT && pixels[id]) { free(pixels[id]); pixels[id] = nullptr; } }

@@ -104,6 +104,12 @@ bar[fy0:fy1, gx0:gx1 + 20] = np.repeat(dark_col, gx1 + 20 - gx0, axis=1)
 add("XPBAR", bar, 837, by0)
 add("XPFILL", fill, 837 + gx0, by0 + fy0)
 
+# splash screen (shown while the board starts): only the part that isn't black, drawn over black
+S = load("splash.png")
+ys, xs = np.where(S[..., :3].max(axis=2) > 6)
+sx0, sx1, sy0, sy1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+add("SPLASH", cut(S, sx0, sy0, sx1, sy1), sx0, sy0)
+
 # ---------------------------------------------------------------- write
 with open(OUT, "w") as fh:
     fh.write("// Made by tools/build_ui.py from art/ui/. Do not edit.\n#pragma once\n#include <stdint.h>\n\n")
