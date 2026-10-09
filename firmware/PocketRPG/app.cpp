@@ -26,7 +26,7 @@ enum Overlay { NONE, SETTINGS, RESET, ITEM, TOUCHTEST, UPDATE, BATTERY };
 static const float PV_Y = 60, PV_H = 218;
 // big touch targets: every button is 66 px tall; the bottom row sits at NAV_Y, 8 px above the screen edge
 // (with the touch calibrated, the bottom edge works)
-static const float NAV_Y = 374, NAV_H = 66;
+static const float NAV_Y = 370, NAV_H = 62;   // every screen's bottom row of buttons sits here
 struct View { float sx, sy, sw, sh; };
 static const View VIEW_FULL = { 0, 10, 368, 435 }, VIEW_HEAD = { 52, 12, 264, 206 };
 
@@ -85,15 +85,45 @@ static void drawView(const View& v, float y, float h, int clipY0, int clipY1, in
 static void heroFull(float y, float h) { ensureCharacter(true); drawView(VIEW_FULL, y, h, 0, SCREEN_H, 0); }
 
 // ---------------------------------------------------------------- widgets
+static const Rgb C_LAVENDER = 0xB4ABD2, C_OUTLINE = 0x120C1A;
+// ---------------------------------------------------------------- UI kit (art/ui/kit, tools/build_ui.py)
+// Every screen is built from the same stretchable pieces: panels, title plates, buttons, slots, bars.
+enum CardBtn { CB_DARK, CB_GOLD, CB_DANGER, CB_OFF };
+static const Rgb C_SCREEN = 0x07060E, C_CREAM = 0xFFF0C8;
+static void kitScreen() { fillRect(0, 0, SCREEN_W, SCREEN_H, C_SCREEN); }
+// title plate with a big outlined title; the plate grows with the word
+static int kitTitle(int x, int y, const char* label, int h = 60) {
+  const Font& f = textWidth(FONT_PXB48, label) <= 250 && h >= 56 ? FONT_PXB48 : FONT_PXB24;
+  int w = textWidth(f, label) + 44; if (w < 110) w = 110;
+  uiDrawBox(UI_K_TITLE, x, y, w, h);
+  textOutlined(f, label, x + w / 2, y + h / 2 + (&f == &FONT_PXB48 ? 16 : 9), C_CREAM, C_OUTLINE, 2);
+  return w;
+}
+static void kitButton(int x, int y, int w, int h, const char* label, int kind, Action fn, int arg = 0) {
+  int id = kind == CB_GOLD ? UI_K_BTN_GOLD : kind == CB_DANGER ? UI_K_BTN_RED : kind == CB_OFF ? UI_K_BTN_OFF : UI_K_BTN_DARK;
+  uiDrawBox(id, x, y, w, h);
+  bool big = textWidth(FONT_PXB24, label) <= w - 28;
+  Rgb c = kind == CB_GOLD ? 0x1A1206 : kind == CB_OFF ? 0x8C8C98 : 0xFFF4DA;
+  text(big ? FONT_PXB24 : FONT_PXB16, label, x + w / 2, y + h / 2 + (big ? 9 : 6), c);
+  if (kind != CB_OFF) hit(x, y, w, h, fn, arg);
+}
+// an empty bar with a gold fill (0..1)
+static void kitBar(int x, int y, int w, int h, float frac) {
+  uiDrawBox(UI_K_BAR, x, y, w, h);
+  int in = h >= 22 ? 6 : 5;
+  float iw = w - 2 * in, ih = h - 2 * in;
+  if (frac <= 0) return;
+  if (frac > 1) frac = 1;
+  float fw = iw * frac; if (fw < ih) fw = ih;
+  roundBox(x + in, y + in, fw, ih, ih / 2, 0xF2B92A, 1);
+  roundBox(x + in + 2, y + in + 1, fw - 4 > 0 ? fw - 4 : 0, ih / 3, ih / 6, 0xFFE07A, 0.8f);   // shine
+}
+static void kitCentered(int id, float cx, float cy) { uiDraw(id, (int)(cx - uiW(id) / 2.f + 0.5f), (int)(cy - uiH(id) / 2.f + 0.5f)); }
+
 enum BtnKind { PRIMARY, GHOST, DISABLED, DANGER };
 static void button(float x, float y, float w, float h, const char* label, BtnKind k, Action fn, int arg = 0) {
-  if (k == PRIMARY) roundBox(x, y, w, h, 14, C_GOLD, 1);
-  else if (k == DANGER) roundBox(x, y, w, h, 14, C_DANGER, 1);
-  else roundBox(x, y, w, h, 14, k == DISABLED ? C_PANEL : C_PANEL2, 1, C_LINE, 2);
-  bool small = textWidth(FONT_PXB24, label) > w - 16;
-  text(small ? FONT_PXB16 : FONT_PXB24, label, (int)(x + w / 2), (int)(y + h / 2 + (small ? 5 : 7)),
-       k == PRIMARY ? C_GOLD_INK : k == DANGER ? 0x2A0E0C : k == DISABLED ? C_DIM : C_INK);
-  if (k != DISABLED) hit(x, y, w, h, fn, arg);
+  char up[24]; snprintf(up, sizeof up, "%s", label); for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+  kitButton((int)x, (int)y, (int)w, (int)h, up, k == PRIMARY ? CB_GOLD : k == DANGER ? CB_DANGER : k == DISABLED ? CB_OFF : CB_DARK, fn, arg);
 }
 static void header(int i) {
   const int n = STEP_COUNT, gap = 8, dw = 8, cw = 26;
@@ -421,7 +451,6 @@ static void actGo(int s) { go((Screen)s); }
 static const float HERO_SHIFT = 62;   // hero moved right to free a column on the left for the action icons
 // Home: the hero, the name panel (top left), level and XP (top right), the three actions down the left side
 // and pop-ups at the bottom right. Art from art/ui/ (tools/build_ui.py); text drawn here.
-static const Rgb C_LAVENDER = 0xB4ABD2, C_OUTLINE = 0x120C1A;
 // the shards you have, in a screen's top right corner: icon, then the number ending at `right`
 // (the number shrinks when it would run past `left`, the end of the title panel)
 static void shardCount(const char* have, int right, int cy, int left) {
@@ -429,40 +458,6 @@ static void shardCount(const char* have, int right, int cy, int left) {
   text(f, have, right, cy + (&f == &FONT_PXB24 ? 12 : 8), C_INK, RIGHT);
   uiDraw(UI_SHARD, right - textWidth(f, have) - 6 - uiW(UI_SHARD), cy - uiH(UI_SHARD) / 2);
 }
-// ---------------------------------------------------------------- UI kit (art/ui/kit, tools/build_ui.py)
-// Every screen is built from the same stretchable pieces: panels, title plates, buttons, slots, bars.
-enum CardBtn { CB_DARK, CB_GOLD, CB_DANGER, CB_OFF };
-static const Rgb C_SCREEN = 0x07060E, C_CREAM = 0xFFF0C8;
-static void kitScreen() { fillRect(0, 0, SCREEN_W, SCREEN_H, C_SCREEN); }
-// title plate with a big outlined title; the plate grows with the word
-static int kitTitle(int x, int y, const char* label, int h = 60) {
-  const Font& f = textWidth(FONT_PXB48, label) <= 250 ? FONT_PXB48 : FONT_PXB24;
-  int w = textWidth(f, label) + 44; if (w < 110) w = 110;
-  uiDrawBox(UI_K_TITLE, x, y, w, h);
-  textOutlined(f, label, x + w / 2, y + h / 2 + (&f == &FONT_PXB48 ? 16 : 9), C_CREAM, C_OUTLINE, 2);
-  return w;
-}
-static void kitButton(int x, int y, int w, int h, const char* label, int kind, Action fn, int arg = 0) {
-  int id = kind == CB_GOLD ? UI_K_BTN_GOLD : kind == CB_DANGER ? UI_K_BTN_RED : kind == CB_OFF ? UI_K_BTN_OFF : UI_K_BTN_DARK;
-  uiDrawBox(id, x, y, w, h);
-  bool big = textWidth(FONT_PXB24, label) <= w - 28;
-  Rgb c = kind == CB_GOLD ? 0x1A1206 : kind == CB_OFF ? 0x8C8C98 : 0xFFF4DA;
-  text(big ? FONT_PXB24 : FONT_PXB16, label, x + w / 2, y + h / 2 + (big ? 9 : 6), c);
-  if (kind != CB_OFF) hit(x, y, w, h, fn, arg);
-}
-// an empty bar with a gold fill (0..1)
-static void kitBar(int x, int y, int w, int h, float frac) {
-  uiDrawBox(UI_K_BAR, x, y, w, h);
-  int in = h >= 22 ? 6 : 5;
-  float iw = w - 2 * in, ih = h - 2 * in;
-  if (frac <= 0) return;
-  if (frac > 1) frac = 1;
-  float fw = iw * frac; if (fw < ih) fw = ih;
-  roundBox(x + in, y + in, fw, ih, ih / 2, 0xF2B92A, 1);
-  roundBox(x + in + 2, y + in + 1, fw - 4 > 0 ? fw - 4 : 0, ih / 3, ih / 6, 0xFFE07A, 0.8f);   // shine
-}
-static void kitCentered(int id, float cx, float cy) { uiDraw(id, (int)(cx - uiW(id) / 2.f + 0.5f), (int)(cy - uiH(id) / 2.f + 0.5f)); }
-
 static void drawHome() {
   drawBackgroundAt(fb, SCREEN_W / 2 + HERO_SHIFT);
   ensureCharacter(true);
@@ -559,7 +554,7 @@ static void drawExplore() {
   char tot[16]; fmtThousands(totalSteps(game), tot);
   snprintf(t, sizeof t, "TOTAL STEPS %s", tot);
   text(FONT_PXB16, t, SCREEN_W / 2, 360, C_LAVENDER);
-  kitButton(13, 372, 343, 62, "BACK", CB_DARK, actGo, HOME);
+  kitButton(13, (int)NAV_Y, 343, (int)NAV_H, "BACK", CB_DARK, actGo, HOME);
 }
 
 // ---------------------------------------------------------------- craft
@@ -603,7 +598,7 @@ static void cardLine(int i, const char* s, Rgb c) { text(i ? FONT_PX16 : FONT_PX
 static void cardButton(int i, int n, const char* label, int kind, Action fn, int arg = 0) {
   const int left = 26, right = 342, gap = 8;
   int w = (right - left - gap * (n - 1)) / n, x = left + i * (w + gap);
-  kitButton(x, 350, w, 64, label, kind, fn, arg);
+  kitButton(x, (int)NAV_Y - 6, w, (int)NAV_H, label, kind, fn, arg);
 }
 
 static void actCraftDone(int) { craftPhase = 0; fitAmount(); }
@@ -653,13 +648,13 @@ static void drawCraft(uint32_t now) {
   }
   // the picker
   kitScreen();
-  kitTitle(16, 18, "CRAFT");
+  int ctw = kitTitle(16, 18, "CRAFT");
   char t[40];
   snprintf(t, sizeof t, "%s", PROFESSION_MAKES[craftType()]); for (char* q = t; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
   text(FONT_PXB16, t, 32, 98, C_LAVENDER, LEFT);
   // top right: the shards you have (and the weapon kind)
   char have[16]; fmtThousands(game.mats, have);
-  shardCount(have, 352, 42, 214);
+  shardCount(have, 352, 42, 16 + ctw + 8);
   if (craftType() == IT_WEAPON) {
     char up[16]; strncpy(up, weaponKindName(craftKind), 15); up[15] = 0; for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
     text(FONT_PXB16, up, 352, 90, C_GOLD, RIGHT);
@@ -697,8 +692,8 @@ static void drawCraft(uint32_t now) {
     text(FONT_PXB16, "+", x0 + w1 + gap / 2, 342, C_GOLD);
     text(FONT_PXB16, x2, x0 + w1 + gap, 342, C_INK, LEFT);
   }
-  kitButton(15, 360, 140, 64, "BACK", CB_DARK, actGo, HOME);
-  kitButton(163, 360, 190, 64, "CRAFT", poor || full ? CB_OFF : CB_GOLD, actCraft);
+  kitButton(15, (int)NAV_Y, 140, (int)NAV_H, "BACK", CB_DARK, actGo, HOME);
+  kitButton(163, (int)NAV_Y, 190, (int)NAV_H, "CRAFT", poor || full ? CB_OFF : CB_GOLD, actCraft);
 }
 
 // ---------------------------------------------------------------- bag: 20 slots on two pages
@@ -754,27 +749,27 @@ static void drawBag() {
   }
   for (int i = 0; i < 2; i++) kitCentered(i == bagPage ? UI_K_DOT_ON : UI_K_DOT_OFF, 174 + i * 20, 352);
   if (bagPicking) {
-    kitButton(11, 368, 111, 60, "BACK", CB_DARK, actPickBack);
-    kitButton(129, 368, 111, 60, "TRADE", CB_OFF, actTradeOpen);   // no trading from inside the trade
+    kitButton(11, (int)NAV_Y, 111, (int)NAV_H, "BACK", CB_DARK, actPickBack);
+    kitButton(129, (int)NAV_Y, 111, (int)NAV_H, "TRADE", CB_OFF, actTradeOpen);   // no trading from inside the trade
   } else {
-    kitButton(11, 368, 111, 60, "BACK", CB_DARK, actGo, HOME);
-    kitButton(129, 368, 111, 60, "TRADE", CB_DARK, actTradeOpen);
+    kitButton(11, (int)NAV_Y, 111, (int)NAV_H, "BACK", CB_DARK, actGo, HOME);
+    kitButton(129, (int)NAV_Y, 111, (int)NAV_H, "TRADE", CB_DARK, actTradeOpen);
   }
-  kitButton(247, 368, 110, 60, bagPage ? "PREV" : "NEXT", CB_DARK, actBagPage);
+  kitButton(247, (int)NAV_Y, 110, (int)NAV_H, bagPage ? "PREV" : "NEXT", CB_DARK, actBagPage);
 }
 
 // ---------------------------------------------------------------- gear: what the hero wears (tap the hero)
 static const char* const SLOT_NAMES[GEAR_SLOTS] = { "WEAPON", "ARMOR", "CAPE" };
 static void drawGear() {
-  drawBackground(fb);
-  text(FONT_PX24, "GEAR", 14, 46, C_INK, LEFT);
+  kitScreen();
+  kitTitle(11, 8, "GEAR", 56);
   int lv = heroLevel();
   char t[40]; snprintf(t, sizeof t, "LEVEL %d", lv);
-  text(FONT_PX24, t, 354, 46, C_GOLD, RIGHT);
+  text(FONT_PXB24, t, 352, 48, C_GOLD, RIGHT);
   for (int i = 0; i < GEAR_SLOTS; i++) {
-    float y = 66 + i * 84;
+    float y = 72 + i * 84;
     const Item& it = game.gear[i];
-    roundBox(10, y, 348, 76, 14, C_PANEL, 1, it.tier ? mix(rarityRgb(it.tier), C_LINE, 0.45f) : C_LINE, 2);
+    uiDrawBox(UI_K_PANEL_S, 10, (int)y, 348, 76);
     if (it.tier) itemIcon(it, 50, y + 38, 68, C_PANEL, false);
     else icon(ITEM_ICON[i], 50, y + 38, C_DIM, C_PANEL, 0.62f);
     text(FONT_PX16, SLOT_NAMES[i], 92, (int)(y + 30), C_MUTED, LEFT);
@@ -788,7 +783,8 @@ static void drawGear() {
   }
   uint32_t into = game.xp - xpAtLevel(lv);
   snprintf(t, sizeof t, "%lu / %lu XP", (unsigned long)into, (unsigned long)xpToNext(lv));
-  text(FONT_PX16, t, SCREEN_W / 2, 330, C_MUTED);
+  kitBar(30, 330, 308, 22, (float)into / xpToNext(lv));
+  text(FONT_PXB16, t, SCREEN_W / 2, 368 - 6, C_LAVENDER);
   button(10, NAV_Y, 348, NAV_H, "Back", GHOST, actGo, HOME);
 }
 
@@ -1058,12 +1054,11 @@ static void tradeReceive(const uint8_t* mac, const uint8_t* data, int len) {
 }
 
 static void tradeSlot(float x, float y, const Item& it, bool mine, int i) {
-  Rgb rc = it.tier ? rarityRgb(it.tier) : C_LINE;
-  roundBox(x, y, 80, 80, 12, it.tier ? C_PANEL2 : C_PANEL, 1, it.tier ? mix(rc, C_LINE, 0.45f) : C_LINE, 2);
+  uiDrawBox(UI_K_SLOT, (int)x - 2, (int)y - 2, 84, 84);
   if (it.tier) {
-    itemIcon(it, x + 40, y + 38, 72, C_PANEL2, false);
+    itemIcon(it, x + 40, y + 38, 66, C_PANEL2, false);
     char tn[4]; snprintf(tn, sizeof tn, "%d", it.tier);
-    text(FONT_PXB16, tn, (int)(x + 72), (int)(y + 74), rc, RIGHT);
+    textOutlined(FONT_PXB16, tn, (int)(x + 72), (int)(y + 74), rarityRgb(it.tier), C_OUTLINE, 1, RIGHT);
   } else if (mine) { thickLine(x + 40, y + 28, x + 40, y + 52, 4, C_DIM); thickLine(x + 28, y + 40, x + 52, y + 40, 4, C_DIM); }   // +
   if (mine) hit(x, y, 80, 80, actTradeSlot, i);
   else if (it.tier) hit(x, y, 80, 80, actOpenTradeItem, i);
@@ -1075,71 +1070,78 @@ static void approvalChip(float right, float baseline, bool on) {
   text(FONT_PXB16, t, (int)(right - w / 2), (int)baseline, on ? 0xE6FFEE : C_MUTED);
 }
 static void drawTrade(uint32_t now) {
-  drawBackground(fb);
   if (bagPicking && tState == T_OPEN) { drawBag(); return; }
-  text(FONT_PX24, "TRADE", 14, 46, C_INK, LEFT);
+  kitScreen();
+  kitTitle(11, 8, "TRADE", 56);
   if (tState == T_SEARCH) {
-    float k = fmodf(now / 1400.f, 1.f);   // radar pulse
-    for (int i = 0; i < 3; i++) { float kk = fmodf(k + i / 3.f, 1.f); ring(184, 190, 20 + 90 * kk, 3, C_GOLD, 1 - kk); }
-    disc(184, 190, 14, C_GOLD);
-    text(FONT_PX16, "Looking for a hero nearby", SCREEN_W / 2, 318, C_INK);
-    text(FONT_PX16, "Open Trade on the other board", SCREEN_W / 2, 340 - 4, C_MUTED);
-    button(10, NAV_Y, 348, NAV_H, "Cancel", GHOST, actTradeCancel);
+    float k = fmodf(now / 1400.f, 1.f);   // radar pulse around the round frame
+    for (int i = 0; i < 3; i++) { float kk = fmodf(k + i / 3.f, 1.f); ring(184, 190, 62 + 70 * kk, 3, C_GOLD, 0.8f * (1 - kk)); }
+    kitCentered(UI_K_ROUND_S, 184, 190);
+    disc(184, 190, 10 + 3 * sinf(now / 200.f), C_GOLD);
+    text(FONT_PXB16, "LOOKING FOR A HERO NEARBY", SCREEN_W / 2, 314, C_INK);
+    text(FONT_PX16, "Open Trade on the other board", SCREEN_W / 2, 338, C_MUTED);
+    kitButton(13, (int)NAV_Y, 343, (int)NAV_H, "CANCEL", CB_DARK, actTradeCancel);
     return;
   }
   if (tState == T_DONE || (tState == T_ENDED && !tEndText)) {
-    text(FONT_PX24, "TRADE DONE", SCREEN_W / 2, 110, C_GOLD);
-    text(FONT_PX16, tGotCount ? "You got" : "You gave your items away", SCREEN_W / 2, 150, C_MUTED);
+    uiDrawBox(UI_K_PANEL, 13, 84, 343, 200);
+    textOutlined(FONT_PXB24, "TRADE DONE", SCREEN_W / 2, 126, 0xFFE9A8, C_OUTLINE, 2);
+    text(FONT_PXB16, tGotCount ? "YOU GOT" : "YOU GAVE YOUR ITEMS AWAY", SCREEN_W / 2, 158, C_LAVENDER);
     for (int i = 0; i < tGotCount; i++) {
-      float x = SCREEN_W / 2 - (tGotCount * 88 - 8) / 2.f + i * 88;
-      tradeSlot(x, 172, tGot[i], false, -1);
+      float x = SCREEN_W / 2 - (tGotCount * 90 - 10) / 2.f + i * 90;
+      tradeSlot(x, 178, tGot[i], false, -1);
     }
     hitCount = 0;   // the received items are only shown here
-    button(10, NAV_Y, 348, NAV_H, "OK", PRIMARY, actTradeLeave);
+    kitButton(13, (int)NAV_Y, 343, (int)NAV_H, "OK", CB_GOLD, actTradeLeave);
     return;
   }
   if (tState == T_ENDED && tPendingEnd && game.trade.key) {   // lost each other while finishing
-    text(FONT_PX24, "NOT FINISHED", SCREEN_W / 2, 150, C_GOLD);
-    text(FONT_PX16, "The boards lost each other", SCREEN_W / 2, 186, C_INK);
+    uiDrawBox(UI_K_PANEL, 13, 84, 343, 220);
+    textOutlined(FONT_PXB24, "NOT FINISHED", SCREEN_W / 2, 128, 0xFFE9A8, C_OUTLINE, 2);
+    text(FONT_PX16, "The boards lost each other", SCREEN_W / 2, 166, C_INK);
     char line[40]; snprintf(line, sizeof line, "Open Trade next to %s", game.trade.name);
-    text(FONT_PX16, line, SCREEN_W / 2, 222, C_MUTED);
-    text(FONT_PX16, "to finish it. Your offered", SCREEN_W / 2, 246, C_MUTED);
-    text(FONT_PX16, "items stay locked until then.", SCREEN_W / 2, 270, C_MUTED);
-    button(10, NAV_Y, 348, NAV_H, "OK", GHOST, actTradeLeave);
+    text(FONT_PX16, line, SCREEN_W / 2, 204, C_MUTED);
+    text(FONT_PX16, "to finish it. Your offered", SCREEN_W / 2, 228, C_MUTED);
+    text(FONT_PX16, "items stay locked until then.", SCREEN_W / 2, 252, C_MUTED);
+    kitButton(13, (int)NAV_Y, 343, (int)NAV_H, "OK", CB_DARK, actTradeLeave);
     return;
   }
   if (tState == T_ENDED) {
-    text(FONT_PX24, tEndText ? tEndText : "", SCREEN_W / 2, 200, C_DANGER);
-    text(FONT_PX16, "Nothing was traded", SCREEN_W / 2, 236, C_MUTED);
-    button(10, NAV_Y, 348, NAV_H, "OK", GHOST, actTradeLeave);
+    uiDrawBox(UI_K_PANEL, 13, 120, 343, 140);
+    char up[40]; snprintf(up, sizeof up, "%s", tEndText ? tEndText : ""); for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+    text(textWidth(FONT_PXB24, up) <= 310 ? FONT_PXB24 : FONT_PXB16, up, SCREEN_W / 2, 184, C_DANGER);
+    text(FONT_PX16, "Nothing was traded", SCREEN_W / 2, 222, C_MUTED);
+    kitButton(13, (int)NAV_Y, 343, (int)NAV_H, "OK", CB_DARK, actTradeLeave);
     return;
   }
   // the open table
   int left = (int)((tEndsAt - now) / 1000) + 1; if ((int32_t)(tEndsAt - now) < 0) left = 0;
   char t[40]; snprintf(t, sizeof t, "0:%02d", left > 59 ? 59 : left);
-  text(FONT_PX24, t, 354, 46, left <= 10 ? C_DANGER : C_GOLD, RIGHT);
-  text(FONT_PX16, "YOU GIVE", 14, 82, C_MUTED, LEFT);
-  approvalChip(354, 82, myApprovalValid() || tState == T_COMMIT);
-  for (int i = 0; i < 3; i++) tradeSlot(12 + i * 88, 94, tMyItems[i], true, i);
+  if (tState != T_COMMIT) text(FONT_PXB24, t, 352, 48, left <= 10 ? C_DANGER : C_GOLD, RIGHT);
+  uiDrawBox(UI_K_PANEL, 8, 70, 352, 128);
+  text(FONT_PXB16, "YOU GIVE", 26, 96, C_LAVENDER, LEFT);
+  approvalChip(342, 98, myApprovalValid() || tState == T_COMMIT);
+  for (int i = 0; i < 3; i++) tradeSlot(54 + i * 90, 106, tMyItems[i], true, i);
+  uiDrawBox(UI_K_PANEL, 8, 202, 352, 128);
   snprintf(t, sizeof t, "%s GIVES", tPeerName); for (char* q = t; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
-  text(FONT_PX16, t, 14, 206, C_MUTED, LEFT);
-  int nw = textWidth(FONT_PX16, t);
+  text(FONT_PXB16, t, 26, 228, C_LAVENDER, LEFT);
+  int nw = textWidth(FONT_PXB16, t);
   snprintf(t, sizeof t, "LV %d", tPeerLevel);
-  text(FONT_PX16, t, 14 + nw + 10, 206, C_GOLD, LEFT);
-  approvalChip(354, 206, peerApprovalValid() || tState == T_COMMIT);
-  for (int i = 0; i < 3; i++) tradeSlot(12 + i * 88, 218, tPeerOffer[i], false, i);
+  text(FONT_PXB16, t, 26 + nw + 10, 228, C_GOLD, LEFT);
+  approvalChip(342, 230, peerApprovalValid() || tState == T_COMMIT);
+  for (int i = 0; i < 3; i++) tradeSlot(54 + i * 90, 238, tPeerOffer[i], false, i);
   const char* note;
   Rgb nc = C_MUTED;
-  if (tState == T_COMMIT) { note = "Finishing the trade..."; nc = C_GOLD; }
-  else if (tradeReady()) { note = "Trading..."; nc = C_GOLD; }
-  else if (!roomForTrade()) { note = "Your bag is full"; nc = C_DANGER; }
-  else if (myApprovalValid()) note = "Waiting for the other hero";
-  else note = "Both approve to trade";
-  text(FONT_PX16, note, SCREEN_W / 2, 330, nc);
+  if (tState == T_COMMIT) { note = "FINISHING THE TRADE..."; nc = C_GOLD; }
+  else if (tradeReady()) { note = "TRADING..."; nc = C_GOLD; }
+  else if (!roomForTrade()) { note = "YOUR BAG IS FULL"; nc = C_DANGER; }
+  else if (myApprovalValid()) note = "WAITING FOR THE OTHER HERO";
+  else note = "BOTH APPROVE TO TRADE";
+  text(FONT_PXB16, note, SCREEN_W / 2, 352, nc);
   if (tState == T_COMMIT) { hitCount = 0; return; }   // nothing to tap while it finishes
-  button(10, NAV_Y, 120, NAV_H, "Cancel", GHOST, actTradeCancel);
-  if (myApprovalValid()) button(140, NAV_Y, 218, NAV_H, "Approved", GHOST, actApprove);
-  else button(140, NAV_Y, 218, NAV_H, "Approve", roomForTrade() ? PRIMARY : DISABLED, actApprove);
+  kitButton(13, (int)NAV_Y, 140, (int)NAV_H, "CANCEL", CB_DARK, actTradeCancel);
+  if (myApprovalValid()) kitButton(161, (int)NAV_Y, 195, (int)NAV_H, "APPROVED", CB_DARK, actApprove);
+  else kitButton(161, (int)NAV_Y, 195, (int)NAV_H, "APPROVE", roomForTrade() ? CB_GOLD : CB_OFF, actApprove);
 }
 
 // ---------------------------------------------------------------- always-on screen
@@ -1178,14 +1180,11 @@ static void actSettingsSwipe(int d) { settingsPage = d > 0 ? 1 : 0; }
 static void actDone(int) { overlay = NONE; settingsPage = 0; }
 
 static void settingRow(float y, const char* label, const char* sub, const char* value, int toggle, Action fn, Rgb labelColor = C_INK) {
-  roundBox(10, y, 348, 62, 14, C_PANEL, 1, C_LINE, 2);
-  text(FONT_PX24, label, 26, (int)(sub ? y + 30 : y + 39), labelColor, LEFT);
-  if (sub) text(FONT_PX16, sub, 26, (int)(y + 51), C_MUTED, LEFT);
-  if (value) text(FONT_PXB24, value, 340, (int)(y + 39), C_GOLD, RIGHT);
-  if (toggle >= 0) {
-    roundBox(288, y + 16, 54, 30, 15, toggle ? C_GOLD : C_LINE, 1);
-    disc(toggle ? 327 : 303, y + 31, 11, toggle ? C_GOLD_INK : C_MUTED);
-  }
+  uiDrawBox(UI_K_PANEL_S, 10, (int)y, 348, 64);
+  text(FONT_PX24, label, 28, (int)(sub ? y + 32 : y + 40), labelColor, LEFT);
+  if (sub) text(FONT_PX16, sub, 28, (int)(y + 51), C_MUTED, LEFT);
+  if (value) text(FONT_PXB24, value, 338, (int)(y + 39), C_GOLD, RIGHT);
+  if (toggle >= 0) kitCentered(toggle ? UI_K_TOGGLE_ON : UI_K_TOGGLE_OFF, 312, y + 31);
   hit(10, y, 348, 62, fn);
 }
 // battery: pixel battery icon and the percentage (red under 20 %), or "USB" with no battery
@@ -1291,8 +1290,8 @@ static void actUpdSetup(int) { appUpdateStatus(U_BUSY, "Starting WiFi...", "", -
 static void actUpdStop(int) { platformUpdate(UA_STOP); appUpdateStatus(U_IDLE, "Ready", "Tap Check to look for updates", -1); }
 static void actUpdBack(int) { platformUpdate(UA_STOP); overlay = SETTINGS; settingsPage = 1; }
 static void drawUpdate() {
-  drawBackground(fb);
-  text(FONT_PX24, "UPDATE", 14, 46, C_INK, LEFT);
+  kitScreen();
+  kitTitle(11, 8, "UPDATE", 56);
   char v[24]; snprintf(v, sizeof v, "Version %d", FW_VERSION);
   text(FONT_PX16, v, 354, 44, C_MUTED, RIGHT);
   const int cx = SCREEN_W / 2;
@@ -1319,7 +1318,7 @@ static void drawUpdate() {
     text(FONT_PXB16, t, cx, 254, C_INK);
   }
   if (updBusy()) return;   // nothing to tap while it works
-  settingRow(282, "WiFi", updState == U_NO_WIFI ? "Add a network first" : "Add a network", nullptr, -1, actUpdSetup);
+  settingRow(274, "WiFi", updState == U_NO_WIFI ? "Add a network first" : "Add a network", nullptr, -1, actUpdSetup);
   button(10, NAV_Y, 120, NAV_H, "Back", GHOST, actUpdBack);
   if (updState == U_AVAILABLE) button(140, NAV_Y, 218, NAV_H, "Install", PRIMARY, actUpdInstall);
   else button(140, NAV_Y, 218, NAV_H, "Check", PRIMARY, actUpdCheck);
@@ -1337,8 +1336,8 @@ static void actBattery(int) { overlay = BATTERY; }
 static void actBatteryBack(int) { overlay = SETTINGS; settingsPage = 0; }
 static const Rgb BM_COL[5] = { C_GOLD, 0xB4ABD2, 0x5A5378, 0x7BD88F, C_DANGER };
 static void drawBatteryLog() {
-  drawBackground(fb);
-  text(FONT_PX24, "BATTERY", 14, 46, C_INK, LEFT);
+  kitScreen();
+  kitTitle(11, 8, "BATTERY", 56);
   drawBattery(354, 46);
   static BatSample log[160];
   int n = platformBatteryLog(log, 160);
@@ -1383,23 +1382,23 @@ static void drawBatteryLog() {
 
 // Two pages: screen options first; orientation and Start over on the second
 static void drawSettings() {
-  drawBackground(fb);
-  text(FONT_PX24, "SETTINGS", 14, 46, C_INK, LEFT);
+  kitScreen();
+  kitTitle(11, 8, "SETTINGS", 56);
   swipeFn = actSettingsSwipe;
   drawBattery(354, 46);
   if (settingsPage == 0) {
-    settingRow(72, "Always-on", "Steps when idle", nullptr, settings.alwaysOn, actAlwaysOn);
+    settingRow(70, "Always-on", "Steps when idle", nullptr, settings.alwaysOn, actAlwaysOn);
     char t[8]; snprintf(t, sizeof t, "%u s", TIMEOUT_SECONDS[settings.timeout]);
-    settingRow(142, "Timeout", "Before it dims", t, -1, actTimeout);
-    settingRow(212, "Brightness", nullptr, BRIGHTNESS_NAMES[settings.brightness], -1, actBrightness);
-    settingRow(282, "Battery", "Use per hour", nullptr, -1, actBattery);
+    settingRow(138, "Timeout", "Before it dims", t, -1, actTimeout);
+    settingRow(206, "Brightness", nullptr, BRIGHTNESS_NAMES[settings.brightness], -1, actBrightness);
+    settingRow(274, "Battery", "Use per hour", nullptr, -1, actBattery);
     button(10, NAV_Y, 120, NAV_H, "More", GHOST, actSettingsPage, 1);
   } else {
-    settingRow(72, "Upside down", "Turn the screen", nullptr, settings.upsideDown, actUpsideDown);
-    settingRow(142, "Touch test", "Tap dots to calibrate", nullptr, -1, actTouchTest);
+    settingRow(70, "Upside down", "Turn the screen", nullptr, settings.upsideDown, actUpsideDown);
+    settingRow(138, "Touch test", "Tap dots to calibrate", nullptr, -1, actTouchTest);
     char v[16]; snprintf(v, sizeof v, "v%d", FW_VERSION);
-    settingRow(212, "Update", "Get the newest version", v, -1, actUpdate);
-    settingRow(282, "Start over", "Delete this hero", nullptr, -1, actStartOver, C_DANGER);
+    settingRow(206, "Update", "Get the newest version", v, -1, actUpdate);
+    settingRow(274, "Start over", "Delete this hero", nullptr, -1, actStartOver, C_DANGER);
     button(10, NAV_Y, 120, NAV_H, "Back", GHOST, actSettingsPage, 0);
   }
   // page dots above the buttons
@@ -1407,18 +1406,16 @@ static void drawSettings() {
   button(140, NAV_Y, 218, NAV_H, "Done", PRIMARY, actDone);
 }
 static void drawReset() {
-  fillRect(0, 0, SCREEN_W, SCREEN_H, C_BG, 0.78f);
-  roundBox(24, 100, 320, 236, 16, C_PANEL, 1, C_LINE, 2);
-  text(FONT_PX24, "START OVER?", SCREEN_W / 2, 154, C_GOLD);
+  fillRect(0, 0, SCREEN_W, SCREEN_H, C_SCREEN, 0.85f);
+  uiDrawBox(UI_K_PANEL, 18, 96, 332, 244);
+  textOutlined(FONT_PXB24, "START OVER?", SCREEN_W / 2, 150, 0xFFE9A8, C_OUTLINE, 2);
   char line[48];
   if (hero.name[0] && (screen == READY || screen == HOME)) snprintf(line, sizeof line, "This deletes %s for good.", hero.name);
   else snprintf(line, sizeof line, "This clears the hero setup.");
-  text(FONT_PX16, line, SCREEN_W / 2, 196, C_INK);
-  text(FONT_PX16, "Gear and progress go too.", SCREEN_W / 2, 222, C_MUTED);
-  button(36, 246, 140, 66, "Keep", GHOST, backToSettings);
-  roundBox(192, 246, 140, 66, 14, C_DANGER, 1);
-  text(FONT_PXB24, "Delete", 262, 286, 0x2A0E0C);
-  hit(192, 246, 140, 66, actErase);
+  text(FONT_PX16, line, SCREEN_W / 2, 192, C_INK);
+  text(FONT_PX16, "Gear and progress go too.", SCREEN_W / 2, 218, C_MUTED);
+  kitButton(34, 252, 144, 64, "KEEP", CB_DARK, backToSettings);
+  kitButton(190, 252, 144, 64, "DELETE", CB_DANGER, actErase);
 }
 
 // ---------------------------------------------------------------- public
