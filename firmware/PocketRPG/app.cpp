@@ -422,18 +422,6 @@ static const float HERO_SHIFT = 62;   // hero moved right to free a column on th
 // Home: the hero, the name panel (top left), level and XP (top right), the three actions down the left side
 // and pop-ups at the bottom right. Art from art/ui/ (tools/build_ui.py); text drawn here.
 static const Rgb C_LAVENDER = 0xB4ABD2, C_OUTLINE = 0x120C1A;
-// shard (the crafting material): a small crystal, until its art arrives
-static void shardIcon(float cx, float cy, float k) {
-  const float pts[] = { 0, -14, 9, -4, 6, 12, -6, 12, -9, -4 };
-  float p[10]; for (int i = 0; i < 5; i++) { p[i * 2] = cx + pts[i * 2] * k; p[i * 2 + 1] = cy + pts[i * 2 + 1] * k; }
-  polygon(p, 5, 0x6FD3F2);
-  const float hi[] = { 0, -14, 9, -4, 0, -1 };
-  float h[6]; for (int i = 0; i < 3; i++) { h[i * 2] = cx + hi[i * 2] * k; h[i * 2 + 1] = cy + hi[i * 2 + 1] * k; }
-  polygon(h, 3, 0xC9F4FF);
-  const float sh[] = { 0, -1, 6, 12, -6, 12 };
-  float d[6]; for (int i = 0; i < 3; i++) { d[i * 2] = cx + sh[i * 2] * k; d[i * 2 + 1] = cy + sh[i * 2 + 1] * k; }
-  polygon(d, 3, 0x2F86B8);
-}
 static void drawHome() {
   drawBackgroundAt(fb, SCREEN_W / 2 + HERO_SHIFT);
   ensureCharacter(true);
@@ -591,7 +579,7 @@ static void drawCraft(uint32_t now) {
   text(FONT_PXB16, t, 32, 94, C_LAVENDER, LEFT);
   // top right: the shards you have (and the weapon kind)
   char have[16]; fmtThousands(game.mats, have);
-  shardIcon(284, 42, 1.0f);
+  uiDraw(UI_SHARD, 352 - textWidth(FONT_PXB24, have) - 8 - uiW(UI_SHARD), 42 - uiH(UI_SHARD) / 2);   // right beside the number
   text(FONT_PXB24, have, 352, 54, C_GOLD, RIGHT);
   if (craftType() == IT_WEAPON) {
     char up[16]; strncpy(up, weaponKindName(craftKind), 15); up[15] = 0; for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;

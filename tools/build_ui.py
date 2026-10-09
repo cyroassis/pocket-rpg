@@ -160,6 +160,14 @@ add("CRAFT_ARROW_R", arrow_r, 784, 900 - 900 + 421)
 craft_geo = dict(cx=cx0 * SCALE, cy=cy0 * SCALE, r=r_in * SCALE)
 print("craft frame:", {k: round(v, 1) for k, v in craft_geo.items()})
 
+# ---------------------------------------------------------------- icons (one picture each, cropped and shrunk to a fixed height)
+def icon(name, file, height):
+    a = np.array(Image.open(os.path.join(SRC, "icons", file)).convert("RGBA")).astype(np.float32)
+    ys, xs = np.where(a[..., 3] > 20)
+    a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    pieces.append((name, shrink(a, height / a.shape[0]), 0, 0))
+icon("SHARD", "icon_shard.png", 30)
+
 # ---------------------------------------------------------------- write
 with open(OUT, "w") as fh:
     fh.write("// Made by tools/build_ui.py from art/ui/. Do not edit.\n#pragma once\n#include <stdint.h>\n\n")
