@@ -6,7 +6,7 @@ static uint16_t fb[SCREEN_W*SCREEN_H];
 uint32_t platformRandom(uint32_t n){ return rand()%n; }
 int main(){
   float* work=(float*)malloc(sizeof(float)*RENDER_WORK_FLOATS);
-  int tiers[5]={1,7,12,17,20}, skins[5]={0,1,2,4,5};
+  int tiers[5]={3,8,13,18,20}, skins[5]={0,1,2,4,5};
   FILE* f=fopen("/tmp/swords.ppm","wb"); fprintf(f,"P6\n%d %d\n255\n",160*5,240);
   static unsigned char img[240][160*5][3];
   for(int v=0;v<5;v++){
