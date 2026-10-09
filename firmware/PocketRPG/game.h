@@ -26,6 +26,18 @@ inline int itemKind(const Item& it) { return it.rolls >> 4; }
 #define GAME_VERSION 1
 #define TEST_START_MATERIALS 10000   // TESTING: new heroes start with this many materials (0 for the real game)
 
+// Trade safety: when both heroes approve, each board first "commits" (saved here), and swaps only after it
+// hears the other board's commit. If the boards lose each other right then, the trade stays pending and the
+// offered items stay locked; the next time the two boards meet, they finish it or cancel it together.
+struct TradeRec {
+  uint32_t key;         // the unfinished trade (0 = none)
+  uint8_t mac[6];       // the other board
+  int8_t slots[3];      // my bag slots on offer (locked while pending)
+  Item give[3], get[3];
+  char name[11];        // the other hero (for the "finish it" note)
+  uint32_t done[4];     // keys of the last trades this board finished (the other board asks about them)
+};
+
 struct Game {
   uint8_t ver;
   uint8_t finds;        // material finds today (0..DAILY_FINDS)
@@ -40,8 +52,11 @@ struct Game {
   // added later (older saves end before these and load with them at 0)
   uint32_t stepsBefore; // steps of all the days before today
   uint32_t lastSteps;   // today's steps, as last seen
+  TradeRec trade;       // a trade that may be unfinished, and the trades this board finished
 };
 #define GAME_OLD_SIZE offsetof(Game, stepsBefore)   // saves made before the step total
+#define GAME_V2_SIZE offsetof(Game, trade)          // saves made before the trade record
+inline bool gameSaveSizeOk(size_t n) { return n == sizeof(Game) || n == GAME_V2_SIZE || n == GAME_OLD_SIZE; }
 inline uint32_t totalSteps(const Game& g) { return g.stepsBefore + g.lastSteps; }
 
 enum FindKind : uint8_t { F_MATERIAL, F_ITEM, F_XP };

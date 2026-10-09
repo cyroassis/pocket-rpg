@@ -357,7 +357,7 @@ static bool loadGame(Game* g) {
   prefs.begin("pocketrpg", true);
   memset(g, 0, sizeof(Game));
   size_t n = prefs.getBytesLength("game");   // a save from before the step total is shorter: the new fields stay 0
-  bool ok = (n == sizeof(Game) || n == GAME_OLD_SIZE) && prefs.getBytes("game", g, n) == n;
+  bool ok = gameSaveSizeOk(n) && prefs.getBytes("game", g, n) == n;
   prefs.end();
   return ok && gameValid(*g);
 }

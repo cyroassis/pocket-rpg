@@ -40,6 +40,8 @@ class Board {
         for (const o of boards) {
           if (o === b || !o.ex || !o.radioOn) continue;
           if (to && to.join() !== o.mac.join()) continue;
+          if (Math.random() < (window.radioDrop || 0)) continue;   // testing: lose some messages (radioDrop 0..1)
+          if (window.radioFilter && !window.radioFilter(b.index, data)) continue;   // testing: drop chosen messages
           setTimeout(() => o.receive(b.mac, data), 20 + Math.random() * 30);   // a little air time
         }
       },
@@ -51,15 +53,15 @@ class Board {
     this.ex.web_splash(); this.blit();   // the start-up picture, like the board
     this.el.querySelector(".loading").hidden = true;
     const splashUntil = performance.now() + 1500;
-    const load = (kind, ptr, size, oldSize) => {
+    const load = (kind, ptr, size, ...older) => {   // older: shorter sizes from earlier versions (new fields stay 0)
       const s = store.get(this.keys[kind]); if (!s) return false;
-      const d = fromB64(s); if (d.length !== size && d.length !== oldSize) return false;
+      const d = fromB64(s); if (d.length !== size && !older.includes(d.length)) return false;
       this.bytes().fill(0, ptr, ptr + size);   // an older, shorter save leaves the new fields at 0
       this.bytes().set(d, ptr); return true;
     };
     load(1, this.ex.web_settings_buf(), this.ex.web_settings_size());
     const haveHero = load(0, this.ex.web_hero_buf(), this.ex.web_hero_size());
-    const haveGame = load(2, this.ex.web_game_buf(), this.ex.web_game_size(), this.ex.web_game_old_size());
+    const haveGame = load(2, this.ex.web_game_buf(), this.ex.web_game_size(), this.ex.web_game_old_size(), this.ex.web_game_v2_size());
     this.ex.web_begin(haveHero ? 1 : 0, haveGame ? 1 : 0);
     this.ex.web_set_battery(80, 0, 0);
     this.brightness = this.ex.web_brightness();

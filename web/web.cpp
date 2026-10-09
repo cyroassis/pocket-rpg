@@ -50,6 +50,7 @@ EXPORT(web_settings_size) int web_settings_size() { return sizeof(Settings); }
 EXPORT(web_game_buf) void* web_game_buf() { return &gameBuf; }
 EXPORT(web_game_size) int web_game_size() { return sizeof(Game); }
 EXPORT(web_game_old_size) int web_game_old_size() { return GAME_OLD_SIZE; }
+EXPORT(web_game_v2_size) int web_game_v2_size() { return GAME_V2_SIZE; }
 EXPORT(web_fb) void* web_fb() { return fb; }
 
 static void buffers() { if (!fb) { fb = (uint16_t*)malloc(SCREEN_W * SCREEN_H * 2); work = (float*)malloc(sizeof(float) * RENDER_WORK_FLOATS); } }

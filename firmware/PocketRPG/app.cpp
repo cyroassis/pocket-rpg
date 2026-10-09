@@ -687,6 +687,7 @@ static void actTradeOpen(int);
 
 // art from art/ui/bag.png (tools/build_ui.py): 4 x 3 slots, the items drawn here
 static const float BAG_CX[4] = { 52.5f, 140.9f, 227.7f, 314.5f }, BAG_CY[3] = { 118.2f, 204.4f, 289.9f }, BAG_SLOT = 76;
+static bool tradeLocked(int bagSlot);
 static void drawBag() {
   uiDraw(UI_BAG_BG, 0, 0);
   char t[16]; snprintf(t, sizeof t, "%d/%d", bagCount(game), BAG_SIZE);
@@ -710,6 +711,11 @@ static void drawBag() {
     char tn[4]; snprintf(tn, sizeof tn, "%d", it.tier);
     textOutlined(FONT_PXB16, tn, (int)(x + BAG_SLOT - 6), (int)(y + BAG_SLOT - 6), locked ? dimmed(rc, C_PANEL2) : rc, C_OUTLINE, 1, RIGHT);
     if (locked) pixelArt(LOCK, 7, x + 8, y + 8, 2, C_MUTED, C_MUTED);
+    if (tradeLocked(idx)) {   // part of an unfinished trade
+      roundBox(x + 4, y + 4, BAG_SLOT - 8, BAG_SLOT - 8, 8, C_BG, 0.55f);
+      text(FONT_PXB16, "TRADE", (int)cx, (int)cy + 6, C_GOLD);
+      if (bagPicking) continue;
+    }
     if (bagPicking && tradeOffers(idx)) { roundBox(x + 2, y + 2, BAG_SLOT - 4, BAG_SLOT - 4, 8, C_BG, 0.6f, C_GOLD, 3); continue; }   // already offered
     hit(x, y, BAG_SLOT, BAG_SLOT, bagPicking ? actPickItem : actOpenItem, idx);
   }
@@ -764,6 +770,13 @@ static void actItemSalvage(int) {
   gameSalvage(game, itemSel); platformSaveGame(game); overlay = NONE;
 }
 static Item tPeerOffer[3];
+// give up on an unfinished trade (asks first): the items unlock. If the other board did finish it, both
+// heroes end up with these items, so this is the last resort when the boards can't meet again.
+static void finishPending(bool doIt);
+static void actUnlockTrade(int) {
+  if (!salvageArmed) { salvageArmed = true; return; }
+  salvageArmed = false; finishPending(false); overlay = NONE;
+}
 static void drawItemCard() {
   const Item& it = itemFrom == FROM_GEAR ? game.gear[itemSel] : itemFrom == FROM_TRADE ? tPeerOffer[itemSel] : game.bag[itemSel];
   const bool itemIsGear = itemFrom == FROM_GEAR;
@@ -776,6 +789,12 @@ static void drawItemCard() {
   else if (ok) cardLine(0, "FITS YOUR LEVEL", C_LAVENDER);
   else { snprintf(st, sizeof st, "NEEDS LEVEL %d", it.tier); cardLine(0, st, C_DANGER); }
   if (itemFrom == FROM_TRADE) { cardButton(0, 1, "BACK", CB_DARK, actItemBack); return; }   // the other hero's item: look only
+  if (itemFrom == FROM_BAG && tradeLocked(itemSel)) {   // unfinished trade: look only, or give up on it
+    snprintf(st, sizeof st, "Locked: trade with %s", game.trade.name); cardLine(1, st, C_GOLD);
+    cardButton(0, 2, "BACK", CB_DARK, actItemBack);
+    cardButton(1, 2, salvageArmed ? "SURE?" : "UNLOCK", salvageArmed ? CB_DANGER : CB_DARK, actUnlockTrade);
+    return;
+  }
   if (!itemIsGear) { snprintf(st, sizeof st, "Salvage gives +%d shards", salvageValue(it)); cardLine(1, st, C_MUTED); }
   else if (bagFreeSlot(game) < 0) cardLine(1, "Bag full: no room to take off", C_DANGER);
   if (itemIsGear) {
@@ -795,9 +814,13 @@ static void drawItemCard() {
 //
 // Every 250 ms each board sends its whole state. Offers carry a version number; an approval names the
 // other side's offer version it was given for, so it stops counting as soon as that offer changes.
-// "ready" = I approved and I see the other approval for my current offer. A board swaps when it is ready
-// and sees the other board ready for the same versions; after that it keeps sending "ready" so the other
-// one swaps too.
+// "ready" = I approved and I see the other approval for my current offer.
+//
+// Finishing safely (both boards must swap, or neither): when both are ready, each board COMMITS: it saves
+// the trade as pending (the offered items lock) and says "commit". A board swaps only once it hears the
+// other board's commit, then says "swapped" for a while. If the boards lose each other in between, the
+// trade stays pending on the board that didn't swap; the next time the two boards meet (Trade open on
+// both), they compare notes: if the other board finished it, this one finishes too; otherwise both cancel.
 struct __attribute__((packed)) TradeMsg {
   char magic[2];      // 'P','R'
   uint8_t ver, kind;  // kind: 0 looking, 1 state, 2 leaving
@@ -806,9 +829,12 @@ struct __attribute__((packed)) TradeMsg {
   uint8_t level, approved, ready, done;
   uint16_t offerVer, approvedFor;   // my offer version; the other offer version my approval is for
   Item offer[3];
+  uint8_t commit, swapped;          // finishing: I committed / I already swapped
+  uint32_t pendKey;                 // my unfinished trade with anyone (0 = none)
+  uint32_t doneKeys[4];             // the last trades I finished
 };
-enum TradeState { T_OFF, T_SEARCH, T_OPEN, T_DONE, T_ENDED };
-static const uint32_t TRADE_WINDOW_MS = 60000, TRADE_LOST_MS = 6000, TRADE_SEND_MS = 200;
+enum TradeState { T_OFF, T_SEARCH, T_OPEN, T_COMMIT, T_DONE, T_ENDED };
+static const uint32_t TRADE_WINDOW_MS = 60000, TRADE_LOST_MS = 6000, TRADE_SEND_MS = 200, TRADE_COMMIT_MS = 10000, TRADE_DONE_MS = 8000;
 static int tState = T_OFF;
 static uint32_t tId = 0, tPeer = 0, tEndsAt = 0, tLastHeard = 0, tLastSent = 0, tDoneAt = 0, tLastSecond = 0;
 static uint8_t tPeerMac[6];
@@ -817,7 +843,9 @@ static uint8_t tPeerLevel = 0;
 static int8_t tMySlot[3] = { -1, -1, -1 };   // bag slots I offer
 static Item tMyItems[3];                      // copies, so the swap can check nothing moved
 static uint16_t tMyVer = 1, tPeerVer = 0, tMyApprovedFor = 0, tPeerApprovedFor = 0;
-static bool tMyApproved = false, tPeerApproved = false, tPeerReady = false, tDirty = false;
+static bool tMyApproved = false, tPeerApproved = false, tPeerReady = false, tDirty = false, tPeerCommit = false;
+static uint32_t tCommitAt = 0;
+static bool tPendingEnd = false;   // the trade ended unfinished (pending)
 static Item tGot[3]; static int tGotCount = 0;
 static const char* tEndText = "";
 
@@ -827,17 +855,25 @@ static int peerOfferCount() { int n = 0; for (int i = 0; i < 3; i++) if (tPeerOf
 static bool myApprovalValid() { return tMyApproved && tMyApprovedFor == tPeerVer; }
 static bool peerApprovalValid() { return tPeerApproved && tPeerApprovedFor == tMyVer; }
 static bool tradeReady() { return tState == T_OPEN && myApprovalValid() && peerApprovalValid(); }
+static bool tradeLocked(int bagSlot) {   // part of an unfinished trade: can't be salvaged, equipped or offered
+  if (!game.trade.key) return false;
+  for (int i = 0; i < 3; i++) if (game.trade.slots[i] == bagSlot) return true;
+  return false;
+}
 static bool roomForTrade() { return BAG_SIZE - bagCount(game) + myOfferCount() >= peerOfferCount(); }
 
 static void tradeSend(uint8_t kind) {
   TradeMsg m; memset(&m, 0, sizeof m);
-  m.magic[0] = 'P'; m.magic[1] = 'R'; m.ver = 1; m.kind = kind;
+  m.magic[0] = 'P'; m.magic[1] = 'R'; m.ver = 2; m.kind = kind;
   m.id = tId; m.peer = tState == T_SEARCH ? 0 : tPeer;
   strncpy(m.name, hero.name, HERO_MAX_NAME); m.level = (uint8_t)heroLevel();
-  bool done = tState == T_DONE;
-  m.approved = done || myApprovalValid(); m.ready = done || tradeReady(); m.done = done;
+  bool done = tState == T_DONE, committed = tState == T_COMMIT || done;
+  m.approved = committed || myApprovalValid(); m.ready = committed || tradeReady(); m.done = done;
   m.offerVer = tMyVer; m.approvedFor = tMyApprovedFor;
   for (int i = 0; i < 3; i++) m.offer[i] = tMyItems[i];
+  m.commit = committed; m.swapped = done;
+  m.pendKey = game.trade.key;
+  memcpy(m.doneKeys, game.trade.done, sizeof m.doneKeys);
   // always sent to everyone nearby: the ids in the message say who it is for (simpler and sturdier than
   // addressed messages, which need the other board registered on the right channel)
   platformRadioSend(nullptr, (const uint8_t*)&m, sizeof m);
@@ -853,7 +889,7 @@ static void tradeEnd(const char* why) {
 static void actTradeOpen(int) {
   memset(tMySlot, -1, sizeof tMySlot); memset(tMyItems, 0, sizeof tMyItems); memset(tPeerOffer, 0, sizeof tPeerOffer);
   tId = platformRandom(0x7FFFFFFF) | 1; tPeer = 0; tMyVer = 1; tPeerVer = 0;
-  tMyApproved = tPeerApproved = tPeerReady = false; tMyApprovedFor = tPeerApprovedFor = 0; tGotCount = 0;
+  tMyApproved = tPeerApproved = tPeerReady = tPeerCommit = tPendingEnd = false; tMyApprovedFor = tPeerApprovedFor = 0; tGotCount = 0;
   tState = T_SEARCH; tEndsAt = lastNow + TRADE_WINDOW_MS; tLastSent = 0;
   platformRadio(true);
   go(TRADE);
@@ -875,35 +911,83 @@ static void actApprove(int) {
   else if (roomForTrade()) { tMyApproved = true; tMyApprovedFor = tPeerVer; }
   tDirty = true; tradeSend(1);
 }
-static void actTradeCancel(int) { tradeEnd("Trade cancelled"); tState = T_OFF; go(BAG); }
+static void actTradeCancel(int) { if (tState == T_COMMIT) return; tradeEnd("Trade cancelled"); tState = T_OFF; go(BAG); }
 static void actTradeLeave(int) { platformRadio(false); tState = T_OFF; bagPicking = false; go(BAG); }
 
-static void tradeSwap() {
+// apply a trade: my offered slots empty, their items go into free slots
+static int applyTrade(const int8_t* slots, const Item* get, Item* got) {
+  for (int i = 0; i < 3; i++) if (slots[i] >= 0) memset(&game.bag[slots[i]], 0, sizeof(Item));
+  int n = 0;
+  for (int i = 0; i < 3; i++) if (get[i].tier) {
+    int s = bagFreeSlot(game); if (s < 0) break;
+    game.bag[s] = get[i]; if (got) got[n] = get[i]; n++;
+  }
+  return n;
+}
+static void rememberDone(uint32_t key) {
+  memmove(game.trade.done + 1, game.trade.done, sizeof(uint32_t) * 3); game.trade.done[0] = key;
+}
+// both ready: check the bag, save the trade as pending, and say "commit"
+static void tradeCommit() {
   for (int i = 0; i < 3; i++)   // my offer must still be in the bag, as offered
     if (tMySlot[i] >= 0 && memcmp(&game.bag[tMySlot[i]], &tMyItems[i], sizeof(Item)) != 0) { tradeEnd("Your bag changed"); return; }
   if (!roomForTrade()) { tradeEnd("Your bag is full"); return; }
-  for (int i = 0; i < 3; i++) if (tMySlot[i] >= 0) memset(&game.bag[tMySlot[i]], 0, sizeof(Item));
-  tGotCount = 0;
-  for (int i = 0; i < 3; i++) if (tPeerOffer[i].tier) {
-    int s = bagFreeSlot(game); if (s < 0) break;
-    game.bag[s] = tPeerOffer[i]; tGot[tGotCount++] = tPeerOffer[i];
-  }
+  TradeRec& r = game.trade;
+  r.key = (tId ^ tPeer) | 1;
+  memcpy(r.mac, tPeerMac, 6);
+  memcpy(r.slots, tMySlot, sizeof r.slots);
+  memcpy(r.give, tMyItems, sizeof r.give); memcpy(r.get, tPeerOffer, sizeof r.get);
+  memcpy(r.name, tPeerName, sizeof r.name);
   platformSaveGame(game);
-  tState = T_DONE; tDoneAt = lastNow; tDirty = true;
+  tState = T_COMMIT; tCommitAt = lastNow; tDirty = true;
   if (overlay == ITEM && itemFrom == FROM_TRADE) overlay = NONE;
   bagPicking = false;
+  tradeSend(1);
+}
+// the other board committed too: swap, and keep saying "swapped" for a while
+static void tradeSwap() {
+  tGotCount = applyTrade(game.trade.slots, game.trade.get, tGot);
+  rememberDone(game.trade.key); game.trade.key = 0;
+  platformSaveGame(game);
+  tState = T_DONE; tDoneAt = lastNow; tDirty = true;
+  tradeSend(1);
+}
+// an unfinished trade, settled when the two boards meet again
+static void finishPending(bool doIt) {
+  TradeRec& r = game.trade;
+  char line[28];
+  if (doIt) {
+    Item got[3]; int n = applyTrade(r.slots, r.get, got);
+    rememberDone(r.key);
+    snprintf(line, sizeof line, "%d item%s from %s", n, n == 1 ? "" : "s", r.name);
+    pushBanner("TRADE FINISHED", line, C_GOLD);
+  } else {
+    snprintf(line, sizeof line, "with %s: items back", r.name);
+    pushBanner("TRADE CANCELLED", line, C_MUTED);
+  }
+  r.key = 0; memset(r.slots, -1, sizeof r.slots);
+  platformSaveGame(game);
+  tDirty = true;
 }
 
 static bool tradeTick(uint32_t now) {
-  if (tState != T_SEARCH && tState != T_OPEN && tState != T_DONE) return false;
+  if (tState != T_SEARCH && tState != T_OPEN && tState != T_COMMIT && tState != T_DONE) return false;
   if (now - tLastSent >= TRADE_SEND_MS) tradeSend(tState == T_SEARCH ? 0 : 1);
-  if (tState == T_DONE) {   // keep telling the other board for a few seconds, then the radio goes off
-    if (now - tDoneAt > 4000) { platformRadio(false); tState = T_ENDED; tEndText = nullptr; }
+  if (tState == T_DONE) {   // keep telling the other board for a while, then the radio goes off
+    if (now - tDoneAt > TRADE_DONE_MS) { platformRadio(false); tState = T_ENDED; tEndText = nullptr; }
     return false;
+  }
+  if (tState == T_COMMIT) {
+    if (tPeerCommit) { tradeSwap(); return true; }
+    if (now - tCommitAt > TRADE_COMMIT_MS) {   // never heard the other commit: stays pending until they meet again
+      platformRadio(false); tState = T_ENDED; tEndText = "Trade not finished"; tPendingEnd = true; tDirty = true;
+      return true;
+    }
+    return now / 1000 != tLastSecond ? (tLastSecond = now / 1000, true) : false;
   }
   if ((int32_t)(now - tEndsAt) > 0) { tradeEnd(tState == T_SEARCH ? "No one found nearby" : "Time's up"); return true; }
   if (tState == T_OPEN && now - tLastHeard > TRADE_LOST_MS) { tradeEnd("Lost the other board"); return true; }
-  if (tradeReady() && tPeerReady) { tradeSwap(); return true; }
+  if (tradeReady() && tPeerReady) { tradeCommit(); return true; }
   bool redraw = tDirty || now / 1000 != tLastSecond;   // the countdown
   tLastSecond = now / 1000; tDirty = false;
   return redraw;
@@ -912,16 +996,23 @@ static bool tradeTick(uint32_t now) {
 static void tradeReceive(const uint8_t* mac, const uint8_t* data, int len) {
   if (len != (int)sizeof(TradeMsg)) return;
   TradeMsg m; memcpy(&m, data, sizeof m);
-  if (m.magic[0] != 'P' || m.magic[1] != 'R' || m.ver != 1 || m.id == tId) return;
+  if (m.magic[0] != 'P' || m.magic[1] != 'R' || m.ver != 2 || m.id == tId) return;
+  // an unfinished trade with this board, from an earlier meeting: settle it now
+  if (game.trade.key && memcmp(mac, game.trade.mac, 6) == 0 && (tState == T_SEARCH || tState == T_OPEN) && m.kind != 2) {
+    bool theyFinished = false;
+    for (int i = 0; i < 4; i++) if (m.doneKeys[i] == game.trade.key) theyFinished = true;
+    finishPending(theyFinished);
+  }
   if (tState == T_SEARCH) {
     if (m.kind == 2 || (m.peer != 0 && m.peer != tId)) return;   // leaving, or already trading with someone else
     tPeer = m.id; memcpy(tPeerMac, mac, 6);
     strncpy(tPeerName, m.name, HERO_MAX_NAME); tPeerName[HERO_MAX_NAME] = 0; tPeerLevel = m.level;
     tState = T_OPEN; tEndsAt = lastNow + TRADE_WINDOW_MS;   // the 60 s window starts when the two boards meet
   }
-  if ((tState != T_OPEN && tState != T_DONE) || m.id != tPeer) return;
+  if ((tState != T_OPEN && tState != T_COMMIT && tState != T_DONE) || m.id != tPeer) return;
   if (m.peer != 0 && m.peer != tId) return;
   tLastHeard = lastNow;
+  if (tState == T_COMMIT) { if (m.commit || m.swapped) tPeerCommit = true; return; }   // nothing else changes now
   if (m.kind == 2) { if (tState == T_OPEN) tradeEnd("The other hero left"); return; }
   if (tState == T_DONE) return;
   if (m.offerVer != tPeerVer) {   // their offer changed: my approval no longer counts
@@ -932,7 +1023,7 @@ static void tradeReceive(const uint8_t* mac, const uint8_t* data, int len) {
   bool a = m.approved, r = m.ready;
   if (a != tPeerApproved || r != tPeerReady || m.approvedFor != tPeerApprovedFor) tDirty = true;
   tPeerApproved = a; tPeerReady = r; tPeerApprovedFor = m.approvedFor;
-  if (m.done && tradeReady()) tPeerReady = true;
+  if ((m.commit || m.swapped) && tradeReady()) { tPeerReady = true; tPeerCommit = true; }
 }
 
 static void tradeSlot(float x, float y, const Item& it, bool mine, int i) {
@@ -976,8 +1067,18 @@ static void drawTrade(uint32_t now) {
     button(10, NAV_Y, 348, NAV_H, "OK", PRIMARY, actTradeLeave);
     return;
   }
+  if (tState == T_ENDED && tPendingEnd && game.trade.key) {   // lost each other while finishing
+    text(FONT_PX24, "NOT FINISHED", SCREEN_W / 2, 150, C_GOLD);
+    text(FONT_PX16, "The boards lost each other", SCREEN_W / 2, 186, C_INK);
+    char line[40]; snprintf(line, sizeof line, "Open Trade next to %s", game.trade.name);
+    text(FONT_PX16, line, SCREEN_W / 2, 222, C_MUTED);
+    text(FONT_PX16, "to finish it. Your offered", SCREEN_W / 2, 246, C_MUTED);
+    text(FONT_PX16, "items stay locked until then.", SCREEN_W / 2, 270, C_MUTED);
+    button(10, NAV_Y, 348, NAV_H, "OK", GHOST, actTradeLeave);
+    return;
+  }
   if (tState == T_ENDED) {
-    text(FONT_PX24, tEndText, SCREEN_W / 2, 200, C_DANGER);
+    text(FONT_PX24, tEndText ? tEndText : "", SCREEN_W / 2, 200, C_DANGER);
     text(FONT_PX16, "Nothing was traded", SCREEN_W / 2, 236, C_MUTED);
     button(10, NAV_Y, 348, NAV_H, "OK", GHOST, actTradeLeave);
     return;
@@ -987,22 +1088,24 @@ static void drawTrade(uint32_t now) {
   char t[40]; snprintf(t, sizeof t, "0:%02d", left > 59 ? 59 : left);
   text(FONT_PX24, t, 354, 46, left <= 10 ? C_DANGER : C_GOLD, RIGHT);
   text(FONT_PX16, "YOU GIVE", 14, 82, C_MUTED, LEFT);
-  approvalChip(354, 82, myApprovalValid());
+  approvalChip(354, 82, myApprovalValid() || tState == T_COMMIT);
   for (int i = 0; i < 3; i++) tradeSlot(12 + i * 88, 94, tMyItems[i], true, i);
   snprintf(t, sizeof t, "%s GIVES", tPeerName); for (char* q = t; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
   text(FONT_PX16, t, 14, 206, C_MUTED, LEFT);
   int nw = textWidth(FONT_PX16, t);
   snprintf(t, sizeof t, "LV %d", tPeerLevel);
   text(FONT_PX16, t, 14 + nw + 10, 206, C_GOLD, LEFT);
-  approvalChip(354, 206, peerApprovalValid());
+  approvalChip(354, 206, peerApprovalValid() || tState == T_COMMIT);
   for (int i = 0; i < 3; i++) tradeSlot(12 + i * 88, 218, tPeerOffer[i], false, i);
   const char* note;
   Rgb nc = C_MUTED;
-  if (tradeReady()) { note = "Trading..."; nc = C_GOLD; }
+  if (tState == T_COMMIT) { note = "Finishing the trade..."; nc = C_GOLD; }
+  else if (tradeReady()) { note = "Trading..."; nc = C_GOLD; }
   else if (!roomForTrade()) { note = "Your bag is full"; nc = C_DANGER; }
   else if (myApprovalValid()) note = "Waiting for the other hero";
   else note = "Both approve to trade";
   text(FONT_PX16, note, SCREEN_W / 2, 330, nc);
+  if (tState == T_COMMIT) { hitCount = 0; return; }   // nothing to tap while it finishes
   button(10, NAV_Y, 120, NAV_H, "Cancel", GHOST, actTradeCancel);
   if (myApprovalValid()) button(140, NAV_Y, 218, NAV_H, "Approved", GHOST, actApprove);
   else button(140, NAV_Y, 218, NAV_H, "Approve", roomForTrade() ? PRIMARY : DISABLED, actApprove);
@@ -1408,7 +1511,7 @@ void appAmbient(bool on) {
 void appScreenOff() {
   if (overlay == UPDATE && !updBusy()) appUpdateStatus(U_IDLE, "Ready", "Tap Check to look for updates", -1);   // WiFi went off
   if (tState == T_SEARCH || tState == T_OPEN) tradeEnd("The screen went off"); }
-bool appKeepAwake() { return overlay == UPDATE || (screen == TRADE && (tState == T_SEARCH || tState == T_OPEN || tState == T_DONE)); }
+bool appKeepAwake() { return overlay == UPDATE || (screen == TRADE && (tState == T_SEARCH || tState == T_OPEN || tState == T_COMMIT || tState == T_DONE)); }
 bool appRadioReceive(const uint8_t* mac, const uint8_t* data, int len) {
   bool before = tDirty; tradeReceive(mac, data, len);
   bool changed = tDirty && !before;

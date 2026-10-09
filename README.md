@@ -13,7 +13,7 @@ Walk to find shards and XP, craft weapons, armor and capes, level up, and trade 
 - **Rarity:** 20 tiers, each one 1.6× rarer than the one before.
 - **Levels:** 100, 125, 150, 200, 250, 325, 400, 500, 650, 800 XP, then the same steps ×10 every 10 levels, forever. You can equip an item when your level is at least its tier.
 - **Gear:** weapon (sword, axe or mace), armor and cape. The bag holds 20 items, and salvage gives shards back.
-- **Trade:** two boards close together. Each side offers up to 3 items and approves. Any change clears both approvals, and when both approve, the items swap.
+- **Trade:** two boards close together. Each side offers up to 3 items and approves. Any change clears both approvals. When both approve, each board commits and swaps only after hearing the other's commit. If the boards lose each other right then, the trade stays pending (offered items locked) and is finished or cancelled together the next time the two boards meet in Trade.
 
 ## Folders
 
