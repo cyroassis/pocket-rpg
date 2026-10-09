@@ -247,8 +247,10 @@ static void icon(int kind, float cx, float cy, Rgb col, Rgb hole, float scale = 
 }
 
 // ---------------------------------------------------------------- navigation
+static int gearPick = -1, gearPage = 0;   // Gear: choosing what to wear in this slot, from the bag
 static void go(Screen s, int st = -1) {
   screen = s; if (st >= 0) step = st;
+  if (s != GEAR) gearPick = -1;
   shownAtPending = true;
   if (s == READY) {
     platformSaveHero(hero);
@@ -761,7 +763,46 @@ static void drawBag() {
 
 // ---------------------------------------------------------------- gear: what the hero wears (tap the hero)
 static const char* const SLOT_NAMES[GEAR_SLOTS] = { "WEAPON", "ARMOR", "CAPE" };
+static const char* const SLOT_PLURAL[GEAR_SLOTS] = { "WEAPONS", "ARMORS", "CAPES" };
+static void actGearPick(int slot) { gearPick = slot; gearPage = 0; }
+static void actGearPage(int d) { gearPage = d < 0 ? 0 : d > 0 ? 1 : gearPage ^ 1; }
+// the bag items that go in this slot, best first
+static int gearChoices(int slot, int* out) {
+  int n = 0;
+  for (int i = 0; i < BAG_SIZE; i++) if (game.bag[i].tier && game.bag[i].type == slot && !tradeLocked(i)) out[n++] = i;
+  for (int a = 1; a < n; a++) for (int b = a; b > 0 && game.bag[out[b]].tier > game.bag[out[b - 1]].tier; b--) { int t = out[b]; out[b] = out[b - 1]; out[b - 1] = t; }
+  return n;
+}
+static void drawGearPick() {
+  kitScreen();
+  int tw = kitTitle(11, 14, SLOT_PLURAL[gearPick], 56);
+  (void)tw;
+  int list[BAG_SIZE], n = gearChoices(gearPick, list), lv = heroLevel();
+  if (gearPage * 12 >= n) gearPage = 0;
+  if (!n) {
+    char t[40]; snprintf(t, sizeof t, "NO %s IN YOUR BAG", SLOT_PLURAL[gearPick]);
+    text(FONT_PXB16, t, SCREEN_W / 2, 190, C_LAVENDER);
+    text(FONT_PX16, "Craft one, or find one exploring.", SCREEN_W / 2, 220, C_MUTED);
+  }
+  for (int i = 0; i < 12; i++) {
+    float cx = BAG_CX[i % 4], cy = BAG_CY[i / 4], x = cx - BAG_SLOT / 2, y = cy - BAG_SLOT / 2;
+    int k = gearPage * 12 + i;
+    uiDrawBox(UI_K_SLOT, (int)x - 3, (int)y - 3, (int)BAG_SLOT + 6, (int)BAG_SLOT + 6);
+    if (k >= n) continue;
+    const Item& it = game.bag[list[k]];
+    Rgb rc = rarityRgb(it.tier); bool locked = it.tier > lv;
+    itemIcon(it, cx, cy - 2, 64, C_PANEL2, locked);
+    char tn[4]; snprintf(tn, sizeof tn, "%d", it.tier);
+    textOutlined(FONT_PXB16, tn, (int)(x + BAG_SLOT - 6), (int)(y + BAG_SLOT - 6), locked ? dimmed(rc, C_PANEL2) : rc, C_OUTLINE, 1, RIGHT);
+    if (locked) pixelArt(LOCK, 7, x + 8, y + 8, 2, C_MUTED, C_MUTED);
+    hit(x, y, BAG_SLOT, BAG_SLOT, actOpenItem, list[k]);
+  }
+  if (n > 12) { swipeFn = actGearPage; for (int i = 0; i < 2; i++) kitCentered(i == gearPage ? UI_K_DOT_ON : UI_K_DOT_OFF, 174 + i * 20, 352); }
+  kitButton(11, (int)NAV_Y, n > 12 ? 170 : 346, (int)NAV_H, "BACK", CB_DARK, actGearPick, -1);
+  if (n > 12) kitButton(187, (int)NAV_Y, 170, (int)NAV_H, gearPage ? "PREV" : "NEXT", CB_DARK, actGearPage, 0);
+}
 static void drawGear() {
+  if (gearPick >= 0) { drawGearPick(); return; }
   kitScreen();
   kitTitle(11, 8, "GEAR", 56);
   int lv = heroLevel();
@@ -780,7 +821,12 @@ static void drawGear() {
       char tn[4]; snprintf(tn, sizeof tn, "%d", it.tier);
       text(FONT_PXB24, tn, 340, (int)(y + 48), rarityRgb(it.tier), RIGHT);
       hit(10, y, 348, 76, actOpenGear, i);
-    } else text(FONT_PX16, "Empty", 92, (int)(y + 56), C_DIM, LEFT);
+    } else {
+      int list[BAG_SIZE], n = gearChoices(i, list);
+      text(FONT_PX16, n ? "Empty: tap to choose" : "Empty", 92, (int)(y + 56), C_DIM, LEFT);
+      if (n) { char c[8]; snprintf(c, sizeof c, "%d", n); text(FONT_PXB16, c, 340, (int)(y + 46), C_LAVENDER, RIGHT); }
+      hit(10, y, 348, 76, actGearPick, i);
+    }
   }
   uint32_t into = game.xp - xpAtLevel(lv);
   snprintf(t, sizeof t, "%lu / %lu XP", (unsigned long)into, (unsigned long)xpToNext(lv));
@@ -791,7 +837,8 @@ static void drawGear() {
 
 // ---------------------------------------------------------------- item card (over the Bag or Gear)
 static void actItemBack(int) { overlay = NONE; }
-static void actItemEquip(int) { if (gameEquip(game, itemSel)) platformSaveGame(game); overlay = NONE; }
+static void actItemEquip(int) { if (gameEquip(game, itemSel)) { platformSaveGame(game); gearPick = -1; } overlay = NONE; }
+static void actItemChange(int) { overlay = NONE; gearPick = itemSel; gearPage = 0; }
 static void actItemTakeOff(int) { if (gameUnequip(game, itemSel)) platformSaveGame(game); overlay = NONE; }
 static void actItemSalvage(int) {
   if (!salvageArmed) { salvageArmed = true; return; }   // second tap confirms
@@ -826,8 +873,10 @@ static void drawItemCard() {
   if (!itemIsGear) { snprintf(st, sizeof st, "Salvage gives +%d shards", salvageValue(it)); cardLine(1, st, C_MUTED); }
   else if (bagFreeSlot(game) < 0) cardLine(1, "Bag full: no room to take off", C_DANGER);
   if (itemIsGear) {
-    cardButton(0, 2, "BACK", CB_DARK, actItemBack);
-    cardButton(1, 2, "TAKE OFF", bagFreeSlot(game) < 0 ? CB_OFF : CB_DARK, actItemTakeOff);
+    int list[BAG_SIZE]; bool more = gearChoices(itemSel, list) > 0;
+    cardButton(0, more ? 3 : 2, "BACK", CB_DARK, actItemBack);
+    cardButton(1, more ? 3 : 2, "TAKE OFF", bagFreeSlot(game) < 0 ? CB_OFF : CB_DARK, actItemTakeOff);
+    if (more) cardButton(2, 3, "CHANGE", CB_GOLD, actItemChange);
   } else {
     cardButton(0, 3, "BACK", CB_DARK, actItemBack);
     cardButton(1, 3, salvageArmed ? "SURE?" : "SALVAGE", salvageArmed ? CB_DANGER : CB_DARK, actItemSalvage);
