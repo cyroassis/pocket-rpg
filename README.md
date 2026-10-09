@@ -20,8 +20,8 @@ Walk to find materials and XP, craft weapons, armor and capes, level up, and tra
 | Folder | What is in it |
 |---|---|
 | `firmware/PocketRPG/` | The Arduino sketch. `app.cpp` (screens), `game.cpp` (rules), `render.cpp` (character drawing), `ota.cpp` (WiFi update), `PocketRPG.ino` (hardware). |
-| `art/` | The original PNG layers (368×448): bodies, hair, armor, capes, weapons, gems. |
-| `tools/` | `build_art.py` turns `art/` into `firmware/PocketRPG/art_data.h`. `build_fonts.py` makes `fonts.h`. |
+| `art/` | The original PNG layers (368×448): bodies, hair, armor, capes, weapons, gems. `art/ui/` has the screen art (mockups at about 3× size). |
+| `tools/` | `build_art.py` turns `art/` into `firmware/PocketRPG/art_data.h`. `build_fonts.py` makes `fonts.h`. `build_ui.py` cuts the screen art into `ui_data.h`. |
 | `web/` | The browser version: `web.cpp` + `web.js` + `shell.html` → `pocket-rpg.html`. |
 | `creator/` | The character creator page used to tune the art. |
 | `tests/` | PC programs that draw screens to images, for checking without a board. |
@@ -45,7 +45,7 @@ This makes two files in `build/`:
 - `PocketRPG_update.bin`: flash at **0x10000**. It keeps the hero.
 - `PocketRPG_full_0x0.bin`: flash at **0x0**. It erases everything.
 
-After changing the art or fonts, run `python3 tools/build_art.py` or `python3 tools/build_fonts.py` first.
+After changing the art or fonts, run `python3 tools/build_art.py`, `tools/build_ui.py` or `tools/build_fonts.py` first.
 
 ## Updating over WiFi
 

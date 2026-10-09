@@ -4,3 +4,4 @@ tests/*.ppm
 tests/*.png
 tests/a.out
 __pycache__/
+tools/ui_preview.png

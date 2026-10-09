@@ -128,3 +128,27 @@ void text(const Font& f, const char* s, int x, int baseline, Rgb c, Align a) {
     x += gl.adv;
   }
 }
+
+void blitPremul(const uint8_t* px, int stride, int w, int h, int x, int y) {
+  for (int j = 0; j < h; j++) {
+    int sy = y + j; if (sy < 0 || sy >= SCREEN_H) continue;
+    const uint8_t* s = px + j * stride;
+    uint16_t* d = T + sy * SCREEN_W;
+    for (int i = 0; i < w; i++, s += 4) {
+      int sx = x + i, a = s[3];
+      if (!a || sx < 0 || sx >= SCREEN_W) continue;
+      if (a == 255) { d[sx] = (uint16_t)(((s[0] & 0xF8) << 8) | ((s[1] & 0xFC) << 3) | (s[2] >> 3)); continue; }
+      uint16_t o = d[sx];
+      int dr = (o >> 8) & 0xF8, dg = (o >> 3) & 0xFC, db = (o << 3) & 0xF8;
+      dr |= dr >> 5; dg |= dg >> 6; db |= db >> 5;
+      int k = 255 - a;
+      int r = s[0] + dr * k / 255, g = s[1] + dg * k / 255, b = s[2] + db * k / 255;
+      if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
+      d[sx] = (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+    }
+  }
+}
+void textOutlined(const Font& f, const char* s, int x, int baseline, Rgb c, Rgb outline, int r, Align a) {
+  for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) if (dx || dy) text(f, s, x + dx, baseline + dy, outline, a);
+  text(f, s, x, baseline, c, a);
+}

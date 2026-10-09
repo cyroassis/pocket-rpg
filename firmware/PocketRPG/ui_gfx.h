@@ -23,5 +23,9 @@ void disc(float cx, float cy, float r, Rgb c, float a = 1.f);
 void ring(float cx, float cy, float r, float lw, Rgb c, float a = 1.f);
 void thickLine(float x0, float y0, float x1, float y1, float w, Rgb c);
 void polygon(const float* xy, int n, Rgb c);  // n points, filled (even-odd), 4x4 supersampled
+// Premultiplied RGBA pixels (stride in bytes), w x h, drawn with their top-left at x, y.
+void blitPremul(const uint8_t* px, int stride, int w, int h, int x, int y);
+// Text with a dark outline around it, for text drawn straight over the picture.
+void textOutlined(const Font& f, const char* s, int x, int baseline, Rgb c, Rgb outline, int r, Align a = CENTER);
 int textWidth(const Font& f, const char* s);
 void text(const Font& f, const char* s, int x, int baseline, Rgb c, Align a = CENTER);

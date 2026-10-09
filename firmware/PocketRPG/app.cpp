@@ -3,6 +3,7 @@
 #include "ui_gfx.h"
 #include "names.h"
 #include "version.h"
+#include "ui_art.h"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -366,12 +367,13 @@ static const int FEET_W = 11, FEET_H = 13;   // size in blocks
 
 // ---------------------------------------------------------------- game: shared bits
 static FindEvent recent[3]; static int recentCount = 0;   // latest finds (newest last), shown on Explore
-struct Banner { char title[20]; char line[28]; Rgb col; };
+struct Banner { char title[20]; char line[28]; Rgb col; Item item; };   // item.tier 0 = no picture
 static Banner banners[4]; static int bannerCount = 0; static uint32_t bannerAt = 0;   // home pop-ups, one at a time
-static void pushBanner(const char* title, const char* line, Rgb col) {
+static void pushBanner(const char* title, const char* line, Rgb col, const Item* item = nullptr) {
   if (bannerCount == 4) { memmove(banners, banners + 1, sizeof(Banner) * 3); bannerCount = 3; }
   Banner& b = banners[bannerCount++];
   strncpy(b.title, title, 19); b.title[19] = 0; strncpy(b.line, line, 27); b.line[27] = 0; b.col = col;
+  memset(&b.item, 0, sizeof b.item); if (item) b.item = *item;
   if (bannerCount == 1) bannerAt = 0;
 }
 static void levelBanner(int gained) {
@@ -416,45 +418,69 @@ static void tierLine(const Item& it, char* out, int n) {
 static void actGo(int s) { go((Screen)s); }
 
 // ---------------------------------------------------------------- home
-static const float HERO_SHIFT = 44;   // hero moved right to free a column on the left for the action icons
+static const float HERO_SHIFT = 62;   // hero moved right to free a column on the left for the action icons
+// Home: the hero, the name panel (top left), level and XP (top right), the three actions down the left side
+// and pop-ups at the bottom right. Art from art/ui/ (tools/build_ui.py); text drawn here.
+static const Rgb C_LAVENDER = 0xB4ABD2, C_OUTLINE = 0x120C1A;
 static void drawHome() {
   drawBackgroundAt(fb, SCREEN_W / 2 + HERO_SHIFT);
   ensureCharacter(true);
   blitCharacter(work, fb, 0, 0, SCREEN_W, SCREEN_H, HERO_SHIFT, 0, SCREEN_W, SCREEN_H, 0, SCREEN_H, 1, 0);
-  hit(120, 96, 248, 250, actGo, GEAR);   // tap the hero: gear
+  hit(130, 100, 238, 280, actGo, GEAR);   // tap the hero: gear
+
+  // name panel: grows to fit the name
   char up[HERO_MAX_NAME + 1]; strcpy(up, hero.name); for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
-  text(FONT_PX24, up, 14, 34, C_GOLD, LEFT);
-  text(FONT_PX16, PROFESSION_NAMES[hero.prof < 0 ? 0 : hero.prof], 14, 56, C_MUTED, LEFT);
-  // level and the XP bar under it
-  int lv = heroLevel();
-  char ln[8]; snprintf(ln, sizeof ln, "%d", lv);
-  // XP bar first (top right corner, clear of the hero), then the level under it
-  float into = (float)(game.xp - xpAtLevel(lv)) / xpToNext(lv);
-  roundBox(264, 12, 90, 8, 4, C_PANEL2, 1);
-  if (into > 0) roundBox(264, 12, 8 + 82 * (into > 1 ? 1 : into), 8, 4, C_GOLD, 1);
-  text(FONT_PX16, "LEVEL", 354, 42, C_MUTED, RIGHT);
-  text(FONT_PX32, ln, 354, 76, C_GOLD, RIGHT);
+  const char* prof = PROFESSION_NAMES[hero.prof < 0 ? 0 : hero.prof];
+  char profUp[16]; snprintf(profUp, sizeof profUp, "%s", prof); for (char* q = profUp; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+  const Font& nf = textWidth(FONT_PXB24, up) <= 150 ? FONT_PXB24 : FONT_PXB16;
   char num[16]; fmtThousands(stepsToday, num);
-  feet(14, 66, 2, C_MUTED);
-  text(FONT_PX16, num, 14 + FEET_W * 2 + 8, 86, C_MUTED, LEFT);
-  // actions: Craft (with the profession's own icon), Explore, Bag
-  const char* labels[3] = { "Craft", "Explore", "Bag" };
-  int kinds[3] = { hero.prof < 0 ? 0 : hero.prof, IC_COMPASS, IC_BAG };
+  int px = uiX(UI_NAME), py = uiY(UI_NAME), pad = 18;
+  int inner = textWidth(nf, up);
+  if (textWidth(FONT_PX16, profUp) > inner) inner = textWidth(FONT_PX16, profUp);
+  int stepsW = uiW(UI_FEET) + 6 + textWidth(FONT_PXB16, num);
+  if (stepsW > inner) inner = stepsW;
+  uiDrawWide(UI_NAME, px, py, inner + 2 * pad);
+  int tx = px + pad;
+  text(nf, up, tx, py + 35, C_GOLD, LEFT);
+  text(FONT_PX16, profUp, tx, py + 57, C_LAVENDER, LEFT);
+  uiDraw(UI_FEET, tx, py + 61);
+  text(FONT_PXB16, num, tx + uiW(UI_FEET) + 6, py + 77, C_INK, LEFT);
+
+  // XP bar, then the level under it (no panel: outlined text over the picture)
+  int lv = heroLevel();
+  float into = (float)(game.xp - xpAtLevel(lv)) / xpToNext(lv);
+  if (into < 0) into = 0; if (into > 1) into = 1;
+  int bx = uiX(UI_XPBAR), fx = uiX(UI_XPFILL), fullW = uiW(UI_XPBAR) - 2 * (fx - bx);
+  uiDraw(UI_XPBAR, bx, uiY(UI_XPBAR));
+  int fw = (int)(fullW * into + 0.5f);
+  if (fw > 0) uiDrawCols(UI_XPFILL, fx, uiY(UI_XPFILL), fw);
+  int right = bx + uiW(UI_XPBAR) - 6;
+  textOutlined(FONT_PXB16, "LEVEL", right, 58, C_LAVENDER, C_OUTLINE, 2, RIGHT);
+  char ln[8]; snprintf(ln, sizeof ln, "%d", lv);
+  textOutlined(FONT_PXB48, ln, right, 98, C_GOLD, C_OUTLINE, 3, RIGHT);
+
+  // actions
+  const int ids[3] = { UI_BTN_CRAFT, UI_BTN_EXPLORE, UI_BTN_BAG };
   Screen to[3] = { CRAFT, EXPLORE, BAG };
   for (int i = 0; i < 3; i++) {
-    float cx = 54, cy = 140 + i * 98;
-    disc(cx, cy, 32, C_PANEL2, 0.92f); ring(cx, cy, 31, 2, C_LINE);
-    icon(kinds[i], cx, cy, C_GOLD, C_PANEL2, i == 0 ? 0.6f : 1);
-    text(FONT_PXB16, labels[i], (int)cx, (int)(cy + 54), C_INK);
-    hit(cx - 50, cy - 40, 100, 100, actGo, to[i]);
+    int x = uiX(ids[i]), y = uiY(ids[i]);
+    uiDraw(ids[i], x, y);
+    hit(x, y, uiW(ids[i]), uiH(ids[i]), actGo, to[i]);
   }
-  // pop-ups (level up, items found while walking), one at a time
+
+  // pop-ups (level up, items found while walking), one at a time; the panel grows to the left
   if (bannerCount) {
     if (!bannerAt) bannerAt = lastNow ? lastNow : 1;
     const Banner& b = banners[0];
-    roundBox(118, 372, 240, 62, 14, C_PANEL, 0.95f, b.col, 2);
-    text(FONT_PX16, b.title, 238, 396, b.col);
-    text(FONT_PX16, b.line, 238, 420, C_INK);
+    int r = uiX(UI_BANNER) + uiW(UI_BANNER), y = uiY(UI_BANNER), pic = b.item.tier ? 46 : 0, pad = 16;
+    int tw = textWidth(FONT_PX16, b.title); if (textWidth(FONT_PXB16, b.line) > tw) tw = textWidth(FONT_PXB16, b.line);
+    int w = pad + pic + tw + pad; if (w < uiW(UI_BANNER)) w = uiW(UI_BANNER);
+    int x = r - w;
+    uiDrawWide(UI_BANNER, x, y, w);
+    if (pic) itemIcon(b.item, x + pad + 18, y + uiH(UI_BANNER) / 2, 40, C_PANEL, false);
+    int tx2 = x + pad + pic;
+    text(FONT_PX16, b.title, tx2, y + 24, C_LAVENDER, LEFT);
+    text(FONT_PXB16, b.line, tx2, y + 44, b.col, LEFT);
   }
 }
 
@@ -1237,7 +1263,7 @@ void appSetSteps(uint32_t today, uint32_t day) {
   for (int i = 0; i < keep; i++) {
     if (recentCount == 3) { memmove(recent, recent + 1, sizeof(FindEvent) * 2); recentCount = 2; }
     recent[recentCount++] = ev[i];
-    if (ev[i].kind == F_ITEM) { char nm[28]; itemName(ev[i].item, nm, sizeof nm); pushBanner("FOUND AN ITEM", nm, rarityRgb(ev[i].item.tier)); }
+    if (ev[i].kind == F_ITEM) { char nm[28]; itemName(ev[i].item, nm, sizeof nm); pushBanner("FOUND AN ITEM", nm, rarityRgb(ev[i].item.tier), &ev[i].item); }
   }
   levelBanner(lv);
   if (n || game.day != dayBefore) platformSaveGame(game);
