@@ -184,7 +184,9 @@ static const uint8_t* layerBytes(const LayerDef& L) {
 
 // hideTop/hx0/hx1: pixels from row hideTop down, between columns hx0..hx1, are left out (the body's own
 // hand and arm under the fist of a weapon drawn without a hand)
-static void drawLayer(const LayerDef& L, int handCut, bool hideHand, int hideTop = SCREEN_H, int hx0 = 0, int hx1 = -1) {
+static int hideBottom = SCREEN_H;   // the arm under the fist ends here (the body's wrist): the legs below stay
+static void drawLayer(const LayerDef& L, int handCut, bool hideHand, int hideTop = SCREEN_H, int hx0 = 0, int hx1 = -1, bool skinOnly = false,
+                      const int16_t* maskRows = nullptr) {
   int k = 0;
   const uint8_t* p = layerBytes(L); if (!p) return;
   const uint8_t* end = p + L.rawLen;
@@ -199,7 +201,13 @@ static void drawLayer(const LayerDef& L, int handCut, bool hideHand, int hideTop
     else { const uint8_t* q = grp == 3 ? paint.a[v & 255] : paint.b[v & 255]; c[0] = q[0]; c[1] = q[1]; c[2] = q[2]; }
     for (int i = 0; i < count; i++, k++) {
       if (hideHand && L.handRows) { int y = k / SCREEN_W, x = k % SCREEN_W; if (y >= handCut && L.handRows[y * 2] >= 0 && x >= L.handRows[y * 2] && x <= L.handRows[y * 2 + 1]) continue; }
-      if (hx1 >= hx0) { int y = k / SCREEN_W, x = k % SCREEN_W; if (y >= hideTop && x >= hx0 && x <= hx1) continue; }
+      if (hx1 >= hx0 && (!skinOnly || grp == 2)) {
+        int y = k / SCREEN_W, x = k % SCREEN_W;
+        if (y >= hideTop && y <= hideBottom) {
+          if (maskRows) { if (maskRows[y * 2] >= 0 && x >= maskRows[y * 2] - 2 && x <= maskRows[y * 2 + 1] + 2) continue; }   // armor: only over the body's hand
+          else if (x >= hx0 && x <= hx1) continue;
+        }
+      }
       blend(k, c[0], c[1], c[2], al);
     }
   }
@@ -234,7 +242,7 @@ static void drawGlow(const LayerDef& L, uint32_t color, float* tmp, int hideTop 
   const uint8_t* end = p + L.rawLen;
   while (p < end) { int count = p[0], info = p[1]; p += 5; float al = (info >> 4) ? (info & 15) / 15.f : 0;
     for (int i = 0; i < count; i++, k++) { int x = k % SCREEN_W, y = k / SCREEN_W;
-      tmp[k] = al > 0.4f && !(y >= hideTop && x >= hx0 && x <= hx1) ? 1.f : 0.f; } }
+      tmp[k] = al > 0.4f && !(y >= hideTop && y <= hideBottom && x >= hx0 && x <= hx1) ? 1.f : 0.f; } }
   float* line = tmp + N;  // scratch line: needs SCREEN_H floats after the image (SCREEN_H >= SCREEN_W)
   for (int pass = 0; pass < 3; pass++) {   // 3 box blurs of radius 4 ~ a soft gaussian
     for (int y = 0; y < SCREEN_H; y++) {
@@ -327,6 +335,7 @@ void renderCharacterLayers(const Look& look, float* work) {
     fist = handFront(&hx0, &hx1);
     if (fist) { hideTop = fist->handTop; hx0 -= 8; hx1 += 4; } else hx1 = -1;
   }
+  hideBottom = body.wrist + 4;
   paint.skin = makeSkin(body.skinBase, SKIN_TARGET[look.skin % 6]);
   float* scratch = work + 4 * N;  // glow scratch: N + SCREEN_H floats
 
@@ -342,14 +351,14 @@ void renderCharacterLayers(const Look& look, float* work) {
   // body (eyes = group A, underwear = group B)
   gradLUT(EYE_RGB[look.eye % 9], body.mid3, paint.a);
   gradLUT(0xA8A8A8, body.mid4, paint.b);
-  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr && !fist, hideTop, hx0, hx1);
+  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr && !fist, hideTop, hx0, hx1, true);   // only the skin of the arm
   // armor
   if (armor) {
     const TierColor& tc = ARMOR_TIERS[look.armorTier - 1];
     if (tc.asDrawn) tintLUT(tc.rgb, tc.lift, paint.a); else gradLUT(tc.rgb, armor->mid3, paint.a);
     gradLUT(RARITY_RGB[look.armorTier - 1], armor->mid4, paint.b);
-    if (look.armorTier >= GLOW_FROM) drawGlow(*armor, RARITY_RGB[look.armorTier - 1], scratch, hideTop, hx0, hx1);
-    drawLayer(*armor, SCREEN_H, false, hideTop, hx0, hx1);
+    if (look.armorTier >= GLOW_FROM) drawGlow(*armor, RARITY_RGB[look.armorTier - 1], scratch);
+    drawLayer(*armor, SCREEN_H, false, hideTop, hx0, hx1, false, body.handRows);   // a glove under the fist
   }
   // cape front (shoulders and clasp), over the armor
   if (capeFront) {
