@@ -13,3 +13,5 @@ void uiDrawWide(int id, int x, int y, int w);
 // Repeats the piece's first column across w pixels (bar fills).
 void uiDrawCols(int id, int x, int y, int w);
 void uiFree(int id);   // drops the unpacked copy (big pieces shown once, like the splash)
+// Kit pieces (K_...): drawn at any size; the corners stay, the middle row and column repeat.
+void uiDrawBox(int id, int x, int y, int w, int h);

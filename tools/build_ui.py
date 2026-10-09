@@ -219,6 +219,27 @@ add("CARD_BG", I, 0, 0)
 add("BTN_DARK", btn_dark, 82, 1038)
 add("BTN_GOLD", btn_gold, 556, 1038)
 
+# ---------------------------------------------------------------- UI kit (art/ui/kit): stretchable pieces
+# Each piece is shrunk to screen size, then only its corners and one middle row/column are kept: the game
+# draws it at any size by repeating the middle (uiDrawBox). Their insides are plain, so nothing shows.
+def kit_piece(name, img, box, corner=24):
+    x0, y0, x1, y1 = box
+    a = img[y0:y1, x0:x1].copy()
+    s = shrink(a)
+    h, w = s.shape[:2]
+    c = min(corner, w // 2 - 1, h // 2 - 1)
+    cols = list(range(c)) + [w // 2] + list(range(w - c, w))
+    rows = list(range(c)) + [h // 2] + list(range(h - c, h))
+    pieces.append((name, s[np.ix_(rows, cols)], 0, 0))
+KA = load("kit/kit_a.png")
+kit_piece("K_PANEL", KA, (129, 29, 1319, 337))
+kit_piece("K_PANEL_S", KA, (107, 370, 531, 628))
+kit_piece("K_TITLE", KA, (591, 417, 1344, 589))
+kit_piece("K_BTN_DARK", KA, (107, 659, 702, 831))
+kit_piece("K_BTN_GOLD", KA, (747, 659, 1341, 831))
+kit_piece("K_BTN_RED", KA, (107, 857, 702, 1029))
+kit_piece("K_BTN_OFF", KA, (747, 857, 1341, 1029))
+
 # ---------------------------------------------------------------- icons (one picture each, cropped and shrunk to a fixed height)
 def icon(name, file, height, box=None):
     """Cropped to the picture; shrunk to `height`, or to fit a box x box square."""

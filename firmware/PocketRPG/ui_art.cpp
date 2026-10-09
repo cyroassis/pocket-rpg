@@ -58,3 +58,29 @@ void uiDrawWide(int id, int x, int y, int w) {
 }
 void uiDrawCols(int id, int x, int y, int w) { for (int i = 0; i < w; i++) cols(id, 0, 1, x + i, y); }
 void uiFree(int id) { if (id >= 0 && id < UI_COUNT && pixels[id]) { free(pixels[id]); pixels[id] = nullptr; } }
+
+void uiDrawBox(int id, int x, int y, int w, int h) {
+  const uint8_t* p = px(id); if (!p || w <= 0 || h <= 0) return;
+  const UiSpriteDef& d = UI_SPRITES[id];
+  int sw = d.w, sh = d.h, hw = sw / 2, hh = sh / 2;
+  // source column for each target column: the left corner, the middle column repeated, the right corner
+  auto src = [](int t, int size, int s, int half) {
+    if (t < half && t < size / 2) return t;
+    int fromEnd = size - 1 - t;
+    if (fromEnd < s - 1 - half && t >= size / 2) return s - 1 - fromEnd;
+    return half;
+  };
+  for (int j = 0; j < h; j++) {
+    const uint8_t* row = p + src(j, h, sh, hh) * sw * 4;
+    // runs of the same source column are blitted together
+    int i = 0;
+    while (i < w) {
+      int sx = src(i, w, sw, hw);
+      if (sx == hw) {   // the stretched middle: one column, many times
+        int run = 0; while (i + run < w && src(i + run, w, sw, hw) == hw) run++;
+        for (int k = 0; k < run; k++) blitPremul(row + hw * 4, 4, 1, 1, x + i + k, y + j);
+        i += run;
+      } else { blitPremul(row + sx * 4, 4, 1, 1, x + i, y + j); i++; }
+    }
+  }
+}
