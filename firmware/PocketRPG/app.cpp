@@ -582,16 +582,33 @@ static void actCraftToBag(int) { craftPhase = 0; fitAmount(); go(BAG); }
 
 static void drawCraft(uint32_t now) {
   drawBackground(fb);
-  if (craftPhase == 1) {   // the hammer at work
-    titleBar("CRAFT");
-    float t = (float)(now - craftAt) / CRAFT_MS, beat = fmodf(t * 4, 1.f), hitK = beat < 0.2f ? 1 - beat / 0.2f : 0;
-    disc(184, 196, 70 + 10 * hitK, C_GOLD, 0.08f + 0.12f * hitK);
-    icon(iconFor(craftType(), craftKind), 184, 196, C_GOLD, C_BG, 1.6f + 0.12f * hitK);
-    for (int i = 0; i < 8; i++) {   // sparks fly at each strike
-      float a = i * 0.785f + (int)(t * 4) * 0.4f, r = 60 + 50 * beat;
-      if (beat < 0.6f) disc(184 + cosf(a) * r, 196 + sinf(a) * r, 4 * (1 - beat / 0.6f) + 1, 0xFFE3A3, 1 - beat / 0.6f);
+  if (craftPhase == 1) {   // the hammer at work, on the item card: the frame rings at each strike and sparks fly
+    uiDraw(UI_CARD_BG, 0, 0);
+    static const char* const WORK[3] = { "FORGING", "CRAFTING", "SEWING" };
+    char t[24]; int dots = (int)((now - craftAt) / 250) % 4;
+    snprintf(t, sizeof t, "%s%.*s", WORK[craftType() < 3 ? craftType() : 1], dots, "...");
+    textOutlined(FONT_PXB24, t, SCREEN_W / 2 - textWidth(FONT_PXB24, WORK[craftType() < 3 ? craftType() : 1]) / 2, 68, 0xFFE9A8, C_OUTLINE, 2, LEFT);
+    float tt = (float)(now - craftAt) / CRAFT_MS, beat = fmodf(tt * 4, 1.f), hitK = beat < 0.2f ? 1 - beat / 0.2f : 0;
+    disc(CARD_CX, CARD_CY, CARD_R + 14 * hitK, C_GOLD, 0.05f + 0.10f * hitK);   // glow at each strike
+    disc(CARD_CX, CARD_CY, CARD_R, 0x0E0C1A, 1);
+    ring(CARD_CX, CARD_CY, CARD_R - 1.5f, 3 + 2 * hitK, C_GOLD);
+    int ic = craftType() == IT_WEAPON ? UI_ICON_SWORD + (craftKind < 3 ? craftKind : 0) : craftType() == IT_ARMOR ? UI_ICON_ARMOR : UI_ICON_CAPE;
+    int shake = hitK > 0.5f ? ((int)(now / 40) % 2 ? 2 : -2) : 0;
+    uiDraw(ic, (int)(CARD_CX - uiW(ic) / 2.f) + shake, (int)(CARD_CY - uiH(ic) / 2.f) + (int)(3 * hitK));
+    for (int i = 0; i < 10; i++) {   // sparks
+      float ang = i * 0.628f + (int)(tt * 4) * 0.45f, r = CARD_R + 6 + 46 * beat;
+      if (beat < 0.6f) disc(CARD_CX + cosf(ang) * r, CARD_CY + sinf(ang) * r, 3.5f * (1 - beat / 0.6f) + 1, 0xFFE3A3, 1 - beat / 0.6f);
     }
-    text(FONT_PX24, "CRAFTING...", SCREEN_W / 2, 330, C_INK);
+    // the luck being rolled, and a bar that fills while it works
+    snprintf(t, sizeof t, "LUCK X%d", craftRolls(craftAmount));
+    text(FONT_PXB16, t, SCREEN_W / 2, 274, C_LAVENDER);
+    float p = tt > 1 ? 1 : tt;
+    roundBox(60, 300, 248, 18, 9, 0x1B1830, 1, 0x3B3350, 2);
+    if (p > 0.02f) roundBox(62, 302, 244 * p < 14 ? 14 : 244 * p, 14, 7, C_GOLD, 1);
+    snprintf(t, sizeof t, "-%d", craftAmount);
+    int tw = textWidth(FONT_PXB24, t), x0 = (SCREEN_W - (uiW(UI_SHARD) + 8 + tw)) / 2;
+    uiDraw(UI_SHARD, x0, 372 - uiH(UI_SHARD) / 2);
+    text(FONT_PXB24, t, x0 + uiW(UI_SHARD) + 8, 382, C_INK, LEFT);
     return;
   }
   if (craftPhase == 2) {   // the new item

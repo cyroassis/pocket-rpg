@@ -19,7 +19,7 @@ int main(){
   Settings s={1,1,1,0};
   appBegin(fb,work,&h,s,&g); appSetSteps(0,20261007);
   uint32_t t=1000;
-  appDraw(t); appTap(50,150); appDraw(t+=100); appTap(259,380); for(int i=0;i<30;i++){ appTick(t+=100);} appDraw(t); dump("k0.ppm");
+  appDraw(t); appTap(50,150); appDraw(t+=100); appTap(259,380); appTick(t); appDraw(t+=10); dump("w0.ppm"); appDraw(t+=420); dump("w1.ppm"); appDraw(t+=500); dump("w2.ppm"); for(int i=0;i<30;i++){ appTick(t+=100);} appDraw(t); dump("k0.ppm");
   appTap(80,370); appDraw(t+=100); appTap(87,380); appDraw(t+=100); appTap(50,380); appDraw(t+=100);   // ok, back home, bag
   appTap(52,118); appDraw(t+=100); dump("k1.ppm");
   appTap(60,370); appDraw(t+=100); appTap(140,118); appDraw(t+=100); appTap(183,370); appDraw(t+=100); dump("k2.ppm");
