@@ -8,7 +8,7 @@ int main(){
   float* work=(float*)malloc(sizeof(float)*RENDER_WORK_FLOATS);
   static unsigned char img[100][3*80][3];
   for(int v=0;v<3;v++){
-    Look l; memset(&l,0,sizeof l); l.body=1; l.skin=1; l.hair=3; l.armor=v==2?0:-1; l.armorTier=12; l.weapon=v==0?-1:0; l.weaponTier=12; l.cape=-1; l.capeTier=1;
+    Look l; memset(&l,0,sizeof l); l.body=BODY; l.skin=1; l.hair=3; l.armor=v==2?0:-1; l.armorTier=12; l.weapon=v==0?-1:0; l.weaponTier=12; l.cape=-1; l.capeTier=1;
     renderCharacterLayers(l, work);
     for(int i=0;i<SCREEN_W*SCREEN_H;i++) fb[i]=0x18C5;
     blitCharacter(work, fb, 0,0,SCREEN_W,SCREEN_H, 0,0,SCREEN_W,SCREEN_H, 0,SCREEN_H, 0, 0);
