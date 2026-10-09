@@ -192,6 +192,18 @@ add("EXPLORE_BG", E, 0, 0)
 explore_bar = [v * SCALE for v in (bx0, by0, bx1, by1)]
 print("explore bar:", [round(v, 1) for v in explore_bar])
 
+# ---------------------------------------------------------------- bag screen (full-screen mockup)
+G = load("bag.png")
+def g_rows(x0, y0, x1, y1, sample):
+    for y in range(y0, y1):
+        G[y, x0:x1] = np.median(np.concatenate([G[y, a:b] for a, b in sample]), axis=0)
+G[235:494] = G[503:762]                                         # top row of slots: empty, like the row under it
+g_rows(410, 95, 620, 180, [(385, 405), (630, 660)])             # 4/20
+g_rows(880, 80, 1110, 190, [(700, 860)])                        # the corner: shards you have
+g_rows(495, 1055, 640, 1110, [(400, 480), (660, 740)])          # page dots
+g_rows(805, 1188, 1062, 1250, [(790, 804), (1064, 1075)])       # PAGE 2 (changes with the page)
+add("BAG_BG", G, 0, 0)
+
 # ---------------------------------------------------------------- icons (one picture each, cropped and shrunk to a fixed height)
 def icon(name, file, height, box=None):
     """Cropped to the picture; shrunk to `height`, or to fit a box x box square."""
@@ -241,3 +253,4 @@ def preview(names, out):
 preview([n for n, *_ in pieces if not n.startswith(("CRAFT", "SPLASH"))], "ui_preview.png")
 preview(["CRAFT_BG", "CRAFT_ARROW_L", "CRAFT_ARROW_R"], "ui_preview_craft.png")
 preview(["EXPLORE_BG"], "ui_preview_explore.png")
+preview(["BAG_BG"], "ui_preview_bag.png")

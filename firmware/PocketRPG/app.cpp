@@ -636,38 +636,44 @@ static void actPickItem(int idx);
 static void actPickBack(int);
 static void actTradeOpen(int);
 
+// art from art/ui/bag.png (tools/build_ui.py): 4 x 3 slots, the items drawn here
+static const float BAG_CX[4] = { 52.5f, 140.9f, 227.7f, 314.5f }, BAG_CY[3] = { 118.2f, 204.4f, 289.9f }, BAG_SLOT = 76;
 static void drawBag() {
-  drawBackground(fb);
-  const char* title = bagPicking ? "OFFER" : "BAG";
-  text(FONT_PX24, title, 14, 46, C_INK, LEFT);
+  uiDraw(UI_BAG_BG, 0, 0);
   char t[16]; snprintf(t, sizeof t, "%d/%d", bagCount(game), BAG_SIZE);
-  text(FONT_PX16, bagPicking ? "pick an item" : t, 14 + textWidth(FONT_PX24, title) + 12, 46, C_MUTED, LEFT);
-  matBadge(354, 46);
+  const char* count = bagPicking ? "PICK" : t;
+  text(FONT_PXB24, count, 136, 53, C_LAVENDER, LEFT);
+  char have[16]; fmtThousands(game.mats, have);
+  int room = 350 - (136 + textWidth(FONT_PXB24, count) + 14) - uiW(UI_SHARD) - 6;   // big numbers shrink to fit
+  const Font& hf = textWidth(FONT_PXB24, have) <= room ? FONT_PXB24 : FONT_PXB16;
+  text(hf, have, 350, &hf == &FONT_PXB24 ? 54 : 50, C_INK, RIGHT);
+  uiDraw(UI_SHARD, 350 - textWidth(hf, have) - 6 - uiW(UI_SHARD), 44 - uiH(UI_SHARD) / 2);
   swipeFn = actBagSwipe;
   int lv = heroLevel();
   for (int i = 0; i < 12; i++) {
     int idx = bagPage * 12 + i;
     if (idx >= BAG_SIZE) break;
-    float x = 12 + (i % 4) * 88, y = 62 + (i / 4) * 88;
+    float cx = BAG_CX[i % 4], cy = BAG_CY[i / 4], x = cx - BAG_SLOT / 2, y = cy - BAG_SLOT / 2;
     const Item& it = game.bag[idx];
-    if (!it.tier) { roundBox(x, y, 80, 80, 12, C_PANEL, 0.7f, C_LINE, 2); continue; }
+    if (!it.tier) continue;
     Rgb rc = rarityRgb(it.tier); bool locked = it.tier > lv;
-    roundBox(x, y, 80, 80, 12, C_PANEL2, 1, mix(rc, C_LINE, 0.45f), 2);
-    itemIcon(it, x + 40, y + 38, 72, C_PANEL2, locked);
+    itemIcon(it, cx, cy - 2, 64, C_PANEL2, locked);
     char tn[4]; snprintf(tn, sizeof tn, "%d", it.tier);
-    text(FONT_PXB16, tn, (int)(x + 72), (int)(y + 74), locked ? dimmed(rc, C_PANEL2) : rc, RIGHT);
+    textOutlined(FONT_PXB16, tn, (int)(x + BAG_SLOT - 6), (int)(y + BAG_SLOT - 6), locked ? dimmed(rc, C_PANEL2) : rc, C_OUTLINE, 1, RIGHT);
     if (locked) pixelArt(LOCK, 7, x + 8, y + 8, 2, C_MUTED, C_MUTED);
-    if (bagPicking && tradeOffers(idx)) { roundBox(x, y, 80, 80, 12, C_BG, 0.6f, C_GOLD, 3); continue; }   // already offered
-    hit(x, y, 80, 80, bagPicking ? actPickItem : actOpenItem, idx);
+    if (bagPicking && tradeOffers(idx)) { roundBox(x + 2, y + 2, BAG_SLOT - 4, BAG_SLOT - 4, 8, C_BG, 0.6f, C_GOLD, 3); continue; }   // already offered
+    hit(x, y, BAG_SLOT, BAG_SLOT, bagPicking ? actPickItem : actOpenItem, idx);
   }
-  for (int i = 0; i < 2; i++) disc(SCREEN_W / 2 - 7 + i * 14, NAV_Y - 16, i == bagPage ? 5 : 3.5f, i == bagPage ? C_GOLD : C_DIM);
+  for (int i = 0; i < 2; i++) disc(173.3f + i * 20.7f, 350.5f, i == bagPage ? 5.5f : 4.5f, i == bagPage ? C_GOLD : 0x3A3458);
+  // buttons: the frames and the BACK / TRADE labels are in the art
+  text(FONT_PXB24, bagPage ? "PREV" : "NEXT", 302, 404, 0xFFF4DA);
+  hit(247, 366, 109, 57, actBagPage);
   if (bagPicking) {
-    button(10, NAV_Y, 120, NAV_H, "Back", GHOST, actPickBack);
-    button(140, NAV_Y, 218, NAV_H, bagPage ? "Page 1" : "Page 2", GHOST, actBagPage);
+    hit(11, 366, 111, 57, actPickBack);
+    fillRect(129, 366, 111, 57, 0x000000, 0.65f);   // no trading from inside the trade
   } else {
-    button(10, NAV_Y, 100, NAV_H, "Back", GHOST, actGo, HOME);
-    button(118, NAV_Y, 112, NAV_H, "Trade", GHOST, actTradeOpen);
-    button(238, NAV_Y, 120, NAV_H, bagPage ? "Page 1" : "Page 2", GHOST, actBagPage);
+    hit(11, 366, 111, 57, actGo, HOME);
+    hit(129, 366, 111, 57, actTradeOpen);
   }
 }
 
