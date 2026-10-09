@@ -139,8 +139,14 @@ def fill_rows(x0, y0, x1, y1, sample):
     for y in range(y0, y1):
         pick = np.concatenate([C[y, a:b] for a, b in sample])
         C[y, x0:x1] = np.median(pick, axis=0)
+def bridge(x0, y0, x1, y1):
+    """Fills each row with a straight blend between the pixels just left and right of the box (smooth glow)."""
+    t = np.linspace(0, 1, x1 - x0)[:, None]
+    for y in range(y0, y1):
+        a, b = C[y, x0 - 1], C[y, x1]
+        C[y, x0:x1] = a * (1 - t) + b * t
 arrow_l = C[421:582, 227:342].copy(); arrow_r = C[421:582, 784:900].copy()
-erase(227, 421, 342, 582); erase(784, 421, 900, 582)
+bridge(218, 412, 352, 591); bridge(775, 412, 909, 591)
 erase(90, 245, 560, 302)        # "FORGE WEAPONS"
 erase(820, 80, 1070, 305)       # the corner: shards and the weapon kind
 erase(320, 980, 820, 1045)      # "LUCK X1 + 2 XP"
@@ -161,12 +167,17 @@ craft_geo = dict(cx=cx0 * SCALE, cy=cy0 * SCALE, r=r_in * SCALE)
 print("craft frame:", {k: round(v, 1) for k, v in craft_geo.items()})
 
 # ---------------------------------------------------------------- icons (one picture each, cropped and shrunk to a fixed height)
-def icon(name, file, height):
+def icon(name, file, height, box=None):
+    """Cropped to the picture; shrunk to `height`, or to fit a box x box square."""
     a = np.array(Image.open(os.path.join(SRC, "icons", file)).convert("RGBA")).astype(np.float32)
     ys, xs = np.where(a[..., 3] > 20)
     a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    pieces.append((name, shrink(a, height / a.shape[0]), 0, 0))
+    k = box / max(a.shape[:2]) if box else height / a.shape[0]
+    pieces.append((name, shrink(a, k), 0, 0))
 icon("SHARD", "icon_shard.png", 30)
+# what the Craft screen shows in its round frame (order: weapon kinds as in the game, then armor and cape)
+for n in ("sword", "axe", "mace", "armor", "cape"):
+    icon("ICON_" + n.upper(), f"icon_{n}.png", 0, box=62)
 
 # ---------------------------------------------------------------- write
 with open(OUT, "w") as fh:

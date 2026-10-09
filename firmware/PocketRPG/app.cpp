@@ -585,9 +585,9 @@ static void drawCraft(uint32_t now) {
     char up[16]; strncpy(up, weaponKindName(craftKind), 15); up[15] = 0; for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
     text(FONT_PXB16, up, 352, 90, C_GOLD, RIGHT);
   }
-  // the item, in the round frame
-  Item show = { (uint8_t)craftType(), 1, (uint8_t)(1 | (craftType() == IT_WEAPON ? craftKind : 0) << 4) };
-  itemIcon(show, UI_CRAFT_CX, UI_CRAFT_CY, UI_CRAFT_R * 1.75f, C_PANEL, false);
+  // what you are making, in the round frame (art/ui/icons)
+  int ic = craftType() == IT_WEAPON ? UI_ICON_SWORD + (craftKind < 3 ? craftKind : 0) : craftType() == IT_ARMOR ? UI_ICON_ARMOR : UI_ICON_CAPE;
+  uiDraw(ic, (int)(UI_CRAFT_CX - uiW(ic) / 2.f + 0.5f), (int)(UI_CRAFT_CY - uiH(ic) / 2.f + 0.5f));
   if (craftType() == IT_WEAPON && weaponKindCount() > 1) {   // which weapon: arrows beside the picture
     uiDraw(UI_CRAFT_ARROW_L, uiX(UI_CRAFT_ARROW_L), uiY(UI_CRAFT_ARROW_L));
     uiDraw(UI_CRAFT_ARROW_R, uiX(UI_CRAFT_ARROW_R), uiY(UI_CRAFT_ARROW_R));
