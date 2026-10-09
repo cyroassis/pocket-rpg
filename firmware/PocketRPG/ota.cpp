@@ -90,7 +90,9 @@ static bool connect() {
   if (wifiOn && WiFi.status() == WL_CONNECTED) return true;
   platformRadio(false);
   say(U_BUSY, "Looking for WiFi...", "", -1);
+  WiFi.persistent(false);   // our own list keeps the networks: the WiFi driver must not reconnect by itself later
   WiFi.mode(WIFI_STA); wifiOn = true;
+  WiFi.setAutoReconnect(false);
   int found = WiFi.scanNetworks();
   int pick = -1, best = -1000;
   for (int i = 0; i < found; i++)
@@ -246,6 +248,7 @@ static void startSetup() {
   platformRadio(false);
   stopSetup();
   say(U_BUSY, "Looking for WiFi...", "", -1);
+  WiFi.persistent(false);
   WiFi.mode(WIFI_AP_STA); wifiOn = true;
   int found = WiFi.scanNetworks();
   netCount = 0;

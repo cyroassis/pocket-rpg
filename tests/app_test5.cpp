@@ -10,6 +10,7 @@ void platformSaveGame(const Game& g){ fprintf(stderr,"save game: xp %u mats %u f
 void platformApplyBrightness(uint8_t){}
 void platformRadio(bool){}
 int platformBatteryLog(BatSample*, int){ return 0; }
+int platformRadioChannel(){ return 1; }
 void platformUpdate(int){}
 void platformRadioSend(const uint8_t*, const uint8_t*, int){}
 uint32_t platformRandom(uint32_t n){ return rand()%n; }

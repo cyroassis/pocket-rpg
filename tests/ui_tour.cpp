@@ -7,6 +7,7 @@ void platformSaveHero(const Hero&){} void platformEraseHero(){} void platformSav
 void platformSaveGame(const Game&){} void platformApplyBrightness(uint8_t){} void platformRadio(bool){}
 void platformRadioSend(const uint8_t*, const uint8_t*, int){} uint32_t platformRandom(uint32_t n){ return rand()%n; }
 int platformBatteryLog(BatSample*, int){ return 0; }
+int platformRadioChannel(){ return 1; }
 void platformUpdate(int){}
 static uint16_t fb[SCREEN_W*SCREEN_H];
 static int k=0;

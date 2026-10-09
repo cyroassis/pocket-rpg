@@ -62,7 +62,8 @@ void platformEraseHero();
 void platformSaveSettings(const Settings& s);
 void platformSaveGame(const Game& g);
 void platformRadio(bool on);     // the short-range radio for trading (off the rest of the time)
-void platformRadioSend(const uint8_t* mac, const uint8_t* data, int len);   // mac = nullptr: to every board nearby
+void platformRadioSend(const uint8_t* mac, const uint8_t* data, int len);
+int platformRadioChannel();      // the radio's channel while trading (shown small on the trade screen)   // mac = nullptr: to every board nearby
 void platformApplyBrightness(uint8_t level);
 void platformUpdate(int action); // UpdateAction: check GitHub, install, set up WiFi, stop (WiFi off)
 uint32_t platformRandom(uint32_t n);

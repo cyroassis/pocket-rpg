@@ -873,6 +873,7 @@ static Item tMyItems[3];                      // copies, so the swap can check n
 static uint16_t tMyVer = 1, tPeerVer = 0, tMyApprovedFor = 0, tPeerApprovedFor = 0;
 static bool tMyApproved = false, tPeerApproved = false, tPeerReady = false, tDirty = false, tPeerCommit = false;
 static uint32_t tCommitAt = 0;
+static uint32_t tHeardAll = 0, tHeardOld = 0;   // radio messages from any board / from boards on an older version
 static bool tPendingEnd = false;   // the trade ended unfinished (pending)
 static Item tGot[3]; static int tGotCount = 0;
 static const char* tEndText = "";
@@ -918,7 +919,7 @@ static void actTradeOpen(int) {
   memset(tMySlot, -1, sizeof tMySlot); memset(tMyItems, 0, sizeof tMyItems); memset(tPeerOffer, 0, sizeof tPeerOffer);
   tId = platformRandom(0x7FFFFFFF) | 1; tPeer = 0; tMyVer = 1; tPeerVer = 0;
   tMyApproved = tPeerApproved = tPeerReady = tPeerCommit = tPendingEnd = false; tMyApprovedFor = tPeerApprovedFor = 0; tGotCount = 0;
-  tState = T_SEARCH; tEndsAt = lastNow + TRADE_WINDOW_MS; tLastSent = 0;
+  tState = T_SEARCH; tEndsAt = lastNow + TRADE_WINDOW_MS; tLastSent = 0; tHeardAll = tHeardOld = 0;
   platformRadio(true);
   go(TRADE);
 }
@@ -1022,6 +1023,8 @@ static bool tradeTick(uint32_t now) {
 }
 
 static void tradeReceive(const uint8_t* mac, const uint8_t* data, int len) {
+  tHeardAll++;
+  if (len >= 5 && data[0] == 'P' && data[1] == 'R' && data[2] != 2) { tHeardOld++; tDirty = true; }
   if (len != (int)sizeof(TradeMsg)) return;
   TradeMsg m; memcpy(&m, data, sizeof m);
   if (m.magic[0] != 'P' || m.magic[1] != 'R' || m.ver != 2 || m.id == tId) return;
@@ -1080,7 +1083,10 @@ static void drawTrade(uint32_t now) {
     kitCentered(UI_K_ROUND_S, 184, 190);
     disc(184, 190, 10 + 3 * sinf(now / 200.f), C_GOLD);
     text(FONT_PXB16, "LOOKING FOR A HERO NEARBY", SCREEN_W / 2, 314, C_INK);
-    text(FONT_PX16, "Open Trade on the other board", SCREEN_W / 2, 338, C_MUTED);
+    if (tHeardOld) text(FONT_PX16, "The other board needs an update", SCREEN_W / 2, 338, C_DANGER);
+    else text(FONT_PX16, "Open Trade on the other board", SCREEN_W / 2, 338, C_MUTED);
+    char dbg[32]; snprintf(dbg, sizeof dbg, "ch %d  heard %lu", platformRadioChannel(), (unsigned long)tHeardAll);
+    text(FONT_PX16, dbg, 352, 48, C_DIM, RIGHT);
     kitButton(13, (int)NAV_Y, 343, (int)NAV_H, "CANCEL", CB_DARK, actTradeCancel);
     return;
   }
@@ -1108,6 +1114,8 @@ static void drawTrade(uint32_t now) {
     return;
   }
   if (tState == T_ENDED) {
+    char dbg[32]; snprintf(dbg, sizeof dbg, "heard %lu", (unsigned long)tHeardAll);
+    text(FONT_PX16, dbg, 352, 48, C_DIM, RIGHT);
     uiDrawBox(UI_K_PANEL, 13, 120, 343, 140);
     char up[40]; snprintf(up, sizeof up, "%s", tEndText ? tEndText : ""); for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
     text(textWidth(FONT_PXB24, up) <= 310 ? FONT_PXB24 : FONT_PXB16, up, SCREEN_W / 2, 184, C_DANGER);

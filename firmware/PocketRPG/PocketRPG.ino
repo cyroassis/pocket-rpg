@@ -453,8 +453,12 @@ void platformRadio(bool on) {
   if (on == radioOn) return;
   radioOn = on;
   if (on) {
+    // No router: the WiFi driver must not try to join a network saved by an earlier version (that would
+    // move the radio off channel 1 and the boards would stop hearing each other)
+    WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect(false, true);   // also forget any network the driver itself saved
     esp_err_t ch = esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
     Serial.printf("radio: my address %s, channel 1 %s\n", WiFi.macAddress().c_str(), ch == ESP_OK ? "ok" : "FAILED");
     if (esp_now_init() != ESP_OK) { Serial.println("radio: ESP-NOW failed"); return; }
@@ -478,8 +482,17 @@ void platformRadioSend(const uint8_t* mac, const uint8_t* data, int len) {
     Serial.printf("radio: sent %lu, failed %lu, received %lu\n", (unsigned long)radioSent, (unsigned long)radioFailed, (unsigned long)radioGot);
   }
 }
+int platformRadioChannel() {   // for the trade screen: the channel the radio is on (should be 1)
+  if (!radioOn) return 0;
+  uint8_t p = 0; wifi_second_chan_t s; esp_wifi_get_channel(&p, &s); return p;
+}
 static bool radioPoll() {   // hand queued messages to the game; true = redraw
   bool redraw = false;
+  static uint32_t chAt = 0;
+  if (radioOn && millis() - chAt > 1000) {   // keep the radio on channel 1
+    chAt = millis();
+    if (platformRadioChannel() != 1) { Serial.printf("radio: channel moved to %d, back to 1\n", platformRadioChannel()); esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE); }
+  }
   while (radioTail != radioHead) {
     RadioMsg& m = radioQueue[radioTail];
     if (appRadioReceive(m.mac, m.data, m.len)) redraw = true;

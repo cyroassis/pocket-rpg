@@ -23,6 +23,7 @@ void platformApplyBrightness(uint8_t level) { js_brightness(level); }
 uint32_t platformRandom(uint32_t n) { return js_random(n); }
 void platformRadio(bool on) { js_radio(on); }
 void platformRadioSend(const uint8_t* mac, const uint8_t* data, int len) { js_radio_send(mac, data, len); }
+int platformRadioChannel() { return 1; }
 int platformBatteryLog(BatSample* out, int max) {   // a made-up night, to show the screen
   int n = 0; float pct = 96;
   for (int i = 0; i < 90 && n < max; i++) {
