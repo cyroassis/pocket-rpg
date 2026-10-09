@@ -19,7 +19,7 @@ Per pixel the board keeps: group (0 clear, 1 fixed color, 2 skin, 3 group A, 4 g
 opacity 0..15, and either the original color (groups 1-2) or a brightness 0..255 (groups 3-4).
 """
 import math
-import zlib
+import lzma
 import os
 import sys
 
@@ -294,6 +294,18 @@ def rle(L):
     return bytes(out)
 
 
+def pack(raw):
+    """Stored as 5 planes (all counts, all group/opacity bytes, then the 3 value bytes), colours cut to the
+    screen's 5-6-5 bits, then LZMA (the board unpacks it with lzma_dec.cpp and puts the records back together)."""
+    r = np.frombuffer(raw, np.uint8).reshape(-1, 5).copy()
+    colour = (r[:, 1] >> 4) <= 2   # groups 1-2 keep a colour; 3-4 a brightness (kept whole)
+    for i, m in ((2, 0xF8), (3, 0xFC), (4, 0xF8)):
+        r[colour, i] &= m
+    planar = b"".join(r[:, i].tobytes() for i in range(5))
+    return lzma.compress(planar, format=lzma.FORMAT_RAW,
+                         filters=[{"id": lzma.FILTER_LZMA1, "preset": 9 | lzma.PRESET_EXTREME, "lc": 3, "lp": 0, "pb": 2}])
+
+
 def c_bytes(name, data):
     lines = [f"static const uint8_t {name}[{len(data)}] = {{"]
     for i in range(0, len(data), 24):
@@ -325,8 +337,7 @@ def main():
             if os.path.exists(os.path.join(ART, bodyfile)):
                 seal_armor(L, classify(load(os.path.join(ART, bodyfile)), "body"))
         raw = rle(L)
-        z = zlib.compressobj(9, zlib.DEFLATED, -15, 9)   # raw deflate: the board unpacks it with inflate.cpp
-        data = z.compress(raw) + z.flush()
+        data = pack(raw)
         total += len(data)
         name = ident(stem)
         parts.append(c_bytes(f"RLE_{name}", data))

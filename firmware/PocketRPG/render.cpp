@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "inflate.h"
+#include "lzma_dec.h"
 #ifdef ARDUINO
 #include <esp_heap_caps.h>
 #endif
@@ -168,7 +168,16 @@ static const uint8_t* layerBytes(const LayerDef& L) {
   }
   uint8_t* d = bigAlloc(L.rawLen);
   if (!d) return nullptr;
-  if (inflateRaw(L.rle, L.rleLen, d, L.rawLen) != L.rawLen) { free(d); return nullptr; }
+  // stored as 5 planes (counts, group/opacity, 3 value bytes; colours in 5-6-5 bits): unpack, then rebuild the records
+  uint8_t* t = bigAlloc(L.rawLen);
+  if (!t || lzmaDecode(L.rle, L.rleLen, t, L.rawLen) != L.rawLen) { free(t); free(d); return nullptr; }
+  uint32_t n = L.rawLen / 5;
+  for (uint32_t i = 0; i < n; i++) {
+    uint8_t* r = d + i * 5;
+    for (int k = 0; k < 5; k++) r[k] = t[k * n + i];
+    if ((r[1] >> 4) <= 2) { r[2] |= r[2] >> 5; r[3] |= r[3] >> 6; r[4] |= r[4] >> 5; }
+  }
+  free(t);
   unpacked[unpackedCount++] = { &L, d }; unpackedBytes += L.rawLen;
   return d;
 }

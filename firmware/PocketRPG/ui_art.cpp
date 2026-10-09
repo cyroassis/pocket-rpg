@@ -1,6 +1,6 @@
 #include "ui_art.h"
 #include "ui_gfx.h"
-#include "inflate.h"
+#include "lzma_dec.h"
 #include <stdlib.h>
 #ifdef ARDUINO
 #include <esp_heap_caps.h>
@@ -18,7 +18,15 @@ static const uint8_t* px(int id) {
   uint8_t* p = (uint8_t*)malloc(d.rawLen);
 #endif
   if (!p) return nullptr;
-  if (inflateRaw(d.z, d.zLen, p, d.rawLen) != d.rawLen) { free(p); return nullptr; }
+  // stored as 4 planes (alpha, red, green, blue in 5-6-5 bits): unpack, then interleave into RGBA
+  uint32_t n = d.rawLen / 4;
+  uint8_t* t = (uint8_t*)malloc(d.rawLen);
+  if (!t || lzmaDecode(d.z, d.zLen, t, d.rawLen) != d.rawLen) { free(t); free(p); return nullptr; }
+  for (uint32_t i = 0; i < n; i++) {
+    uint8_t r = t[n + i], g = t[2 * n + i], b = t[3 * n + i];
+    p[i * 4] = r | r >> 5; p[i * 4 + 1] = g | g >> 6; p[i * 4 + 2] = b | b >> 5; p[i * 4 + 3] = t[i];
+  }
+  free(t);
   return pixels[id] = p;
 }
 

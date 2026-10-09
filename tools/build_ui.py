@@ -3,11 +3,11 @@
 Turns the UI art (art/ui/*.png, drawn at about 3x the screen size) into firmware/PocketRPG/ui_data.h.
 
 Each piece is cut from the full-screen mockups, its sample text is wiped (the game writes its own text),
-it is shrunk to screen size and stored as premultiplied RGBA, compressed with raw deflate.
+it is shrunk to screen size and stored as premultiplied RGBA, compressed with LZMA (as planes, colours in 5-6-5 bits).
 Panels that hold text of any length are drawn stretched: their middle column repeats (see uiDrawWide).
 Preview of every piece: tools/ui_preview.png
 """
-import os, zlib
+import os, lzma
 import numpy as np
 from PIL import Image
 
@@ -117,7 +117,10 @@ with open(OUT, "w") as fh:
     fh.write("enum UiSpriteId { " + ", ".join("UI_" + n for n, *_ in pieces) + ", UI_COUNT };\n\n")
     total = 0
     for n, s, x, y in pieces:
-        co = zlib.compressobj(9, zlib.DEFLATED, -15); z = co.compress(s.tobytes()) + co.flush()
+        # planes (alpha, then red, green, blue cut to the screen's 5-6-5 bits), then LZMA
+        planes = [s[..., 3], s[..., 0] & 0xF8, s[..., 1] & 0xFC, s[..., 2] & 0xF8]
+        z = lzma.compress(b"".join(np.ascontiguousarray(p).tobytes() for p in planes), format=lzma.FORMAT_RAW,
+                          filters=[{"id": lzma.FILTER_LZMA1, "preset": 9 | lzma.PRESET_EXTREME, "lc": 3, "lp": 0, "pb": 2}])
         total += len(z)
         fh.write(f"static const uint8_t UI_Z_{n}[{len(z)}] = {{")
         fh.write(",".join(str(b) for b in z))
