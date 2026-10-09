@@ -49,7 +49,14 @@ enum UpdateAction { UA_CHECK, UA_INSTALL, UA_SETUP, UA_STOP };
 void appUpdateStatus(int state, const char* line1, const char* line2, int progress);   // progress 0..100, -1 = none
 bool appUpdateOpen();            // the Update screen is showing
 
+// Battery log (Settings > Battery): one sample every 10 minutes, oldest first
+enum BatMode : uint8_t { BM_ON, BM_AOD, BM_OFF, BM_CHARGING, BM_RESTART };
+struct BatSample { uint16_t pct10; uint8_t mode; uint8_t sleepPct; };   // level in 0.1 %, the main mode in those
+                                                                          // 10 minutes, and how much of them was asleep
+#define BAT_LOG_MINUTES 10
+
 // Provided by the sketch (or the PC test)
+int platformBatteryLog(BatSample* out, int max);   // copies the log, returns how many samples
 void platformSaveHero(const Hero& h);
 void platformEraseHero();
 void platformSaveSettings(const Settings& s);

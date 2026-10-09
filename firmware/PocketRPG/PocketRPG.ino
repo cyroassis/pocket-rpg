@@ -184,13 +184,23 @@ static int percentFromVoltage(int mv) {
   int i = 0; while (mv > MV[i + 1]) i++;
   return PCT[i] + (PCT[i + 1] - PCT[i]) * (mv - MV[i]) / (MV[i + 1] - MV[i]);
 }
+static float smoothMv = 0;
+static bool batCharging = false, batUsb = false;
+static float pctFine(int mv) {   // the same curve, in 0.1 % steps, for the battery log
+  static const int MV[13]  = { 3500, 3600, 3650, 3700, 3750, 3790, 3830, 3860, 3920, 3970, 4030, 4100, 4180 };
+  static const int PCT[13] = {    0,    3,    6,   11,   20,   30,   42,   52,   60,   67,   76,   88,  100 };
+  if (mv <= MV[0]) return 0;
+  if (mv >= MV[12]) return 100;
+  int i = 0; while (mv > MV[i + 1]) i++;
+  return PCT[i] + (PCT[i + 1] - PCT[i]) * (float)(mv - MV[i]) / (MV[i + 1] - MV[i]);
+}
 static void readBattery() {
-  static float smoothMv = 0;
   if (!pmuOk) { appSetBattery(-1, false, true); return; }
   uint8_t s1 = 0, s2 = 0, h = 0, l = 0, gauge = 0;
   i2cRead(PMU_ADDR, 0x00, &s1, 1);
   i2cRead(PMU_ADDR, 0x01, &s2, 1);
   bool battery = s1 & 0x08, usb = s1 & 0x20, charging = (s2 >> 5) == 0x01;
+  batCharging = charging; batUsb = usb;
   if (!battery) { appSetBattery(-1, false, usb); return; }
   i2cRead(PMU_ADDR, 0x34, &h, 1); i2cRead(PMU_ADDR, 0x35, &l, 1); i2cRead(PMU_ADDR, 0xA4, &gauge, 1);
   int mv = ((h & 0x1F) << 8) | l;
@@ -264,7 +274,7 @@ void platformSaveSettings(const Settings& s) {
 }
 void platformApplyBrightness(uint8_t level) { if (screenOn && !appIsAmbient()) gfx->setBrightness(level); }
 static Settings loadSettings() {
-  Settings s = { 1, 1, 1, 0 };   // always-on on, 30 s, medium brightness, normal orientation
+  Settings s = { 0, 1, 1, 0 };   // always-on off, 30 s, medium brightness, normal orientation
   prefs.begin("pocketrpg", true);
   if (prefs.getBytesLength("settings") == sizeof s) prefs.getBytes("settings", &s, sizeof s);
   prefs.end();
@@ -374,6 +384,7 @@ static void redraw() {
 // BOOT. Used while the screen is off or on the always-on view (touch is off there).
 // The USB serial port drops while sleeping, so logs pause in these modes.
 static bool napWokeByButton = false;
+static uint32_t batSleepMs = 0;   // time spent in light sleep, for the battery log
 static void nap(uint32_t ms, bool wakeOnBoot) {
   Serial.flush();
   esp_sleep_enable_timer_wakeup((uint64_t)ms * 1000ULL);
@@ -382,7 +393,9 @@ static void nap(uint32_t ms, bool wakeOnBoot) {
     gpio_wakeup_enable((gpio_num_t)BOOT_PIN, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
   }
+  int64_t t0 = esp_timer_get_time();
   esp_light_sleep_start();
+  batSleepMs += (uint32_t)((esp_timer_get_time() - t0) / 1000);
   napWokeByButton = false;
   if (wakeOnBoot) {
     napWokeByButton = digitalRead(BOOT_PIN) == LOW;
@@ -392,8 +405,11 @@ static void nap(uint32_t ms, bool wakeOnBoot) {
   }
 }
 
+// The panel's idle mode (8 colours, lower power) while the always-on view shows; normal mode otherwise.
+static void panelIdle(bool on) { bus->beginWrite(); bus->writeCommand(on ? 0x39 : 0x38); bus->endWrite(); }
 static void setAmbient(bool on) {
   if (on) otaStop();
+  panelIdle(on);
   appAmbient(on);
   setCpuFrequencyMhz(on ? 80 : 240);   // slower CPU while the always-on screen idles
   gfx->setBrightness(on ? AMBIENT_BRIGHTNESS : BRIGHTNESS_LEVELS[appSettings().brightness]);
@@ -403,9 +419,10 @@ static void setScreen(bool on) {
   screenOn = on;
   lastActivity = millis();
   if (on) {
-    if (appIsAmbient()) { appAmbient(false); setCpuFrequencyMhz(240); }
+    if (appIsAmbient()) { appAmbient(false); panelIdle(false); }
+    setCpuFrequencyMhz(240);
     gfx->displayOn(); gfx->setBrightness(BRIGHTNESS_LEVELS[appSettings().brightness]); redraw();
-  } else { otaStop(); appScreenOff(); gfx->setBrightness(0); gfx->displayOff(); }
+  } else { otaStop(); appScreenOff(); gfx->setBrightness(0); gfx->displayOff(); setCpuFrequencyMhz(80); }   // slower while it sleeps
 }
 
 // ---------------------------------------------------------------- radio for trading (ESP-NOW)
@@ -469,6 +486,49 @@ static bool radioPoll() {   // hand queued messages to the game; true = redraw
     radioTail = (radioTail + 1) & 7;
   }
   return redraw;
+}
+
+// ---------------------------------------------------------------- battery log (Settings > Battery)
+// Every 10 minutes: the battery level, what the screen mostly did in those minutes and how much of them
+// the board spent asleep. Kept in flash (16 h of samples), so a restart doesn't lose it.
+#define BAT_LOG_N 96
+static BatSample batLog[BAT_LOG_N];
+static int batLogN = 0;
+static uint32_t batModeMs[4], batSampleAt = 0, batModeAt = 0;
+static void batLogLoad() {
+  prefs.begin("pocketbat", true);
+  size_t n = prefs.getBytesLength("log");
+  if (n && n % sizeof(BatSample) == 0 && n <= sizeof batLog) { prefs.getBytes("log", batLog, n); batLogN = n / sizeof(BatSample); }
+  prefs.end();
+  if (batLogN) {   // mark the restart, so the gap is not counted as a drop
+    BatSample r = batLog[batLogN - 1]; r.mode = BM_RESTART; r.sleepPct = 0;
+    if (batLogN == BAT_LOG_N) { memmove(batLog, batLog + 1, sizeof(BatSample) * (BAT_LOG_N - 1)); batLogN--; }
+    batLog[batLogN++] = r;
+  }
+  batSampleAt = batModeAt = millis();
+}
+static void batLogTick() {   // every loop pass: which mode the time went to; every 10 minutes: a sample
+  uint32_t now = millis(), dt = now - batModeAt; batModeAt = now;
+  int m = batCharging || batUsb ? BM_CHARGING : !screenOn ? BM_OFF : appIsAmbient() ? BM_AOD : BM_ON;
+  batModeMs[m] += dt;
+  uint32_t span = now - batSampleAt;
+  if (span < BAT_LOG_MINUTES * 60000UL || smoothMv == 0) return;
+  int best = 0; for (int i = 1; i < 4; i++) if (batModeMs[i] > batModeMs[best]) best = i;
+  if (batModeMs[BM_CHARGING] > 0) best = BM_CHARGING;
+  BatSample b;
+  b.pct10 = (uint16_t)(pctFine((int)smoothMv + (screenOn && !appIsAmbient() ? 30 : 10)) * 10);
+  b.mode = (uint8_t)best;
+  b.sleepPct = (uint8_t)(batSleepMs >= span ? 100 : (uint64_t)batSleepMs * 100 / span);
+  if (batLogN == BAT_LOG_N) { memmove(batLog, batLog + 1, sizeof(BatSample) * (BAT_LOG_N - 1)); batLogN--; }
+  batLog[batLogN++] = b;
+  prefs.begin("pocketbat", false); prefs.putBytes("log", batLog, sizeof(BatSample) * batLogN); prefs.end();
+  Serial.printf("battery log: %.1f%%, mode %d, asleep %d%%\n", b.pct10 / 10.f, b.mode, b.sleepPct);
+  memset(batModeMs, 0, sizeof batModeMs); batSleepMs = 0; batSampleAt = now;
+}
+int platformBatteryLog(BatSample* out, int max) {
+  int n = batLogN < max ? batLogN : max;
+  memcpy(out, batLog + (batLogN - n), sizeof(BatSample) * n);
+  return n;
 }
 
 // ---------------------------------------------------------------- setup / loop
@@ -544,6 +604,7 @@ void setup() {
   if (!rtcOk) Serial.println("Clock not found: steps never reset by day");
   imuInit();
   loadSteps();
+  batLogLoad();
   step("clock, steps");
 
   Hero saved;
@@ -574,8 +635,11 @@ void loop() {
   static bool stepsDirty = false;
   uint32_t now = millis();
 
-  // steps and clock, every 2 seconds, screen on or off
-  if (now - stepsAt > 2000) { stepsAt = now; if (updateSteps()) stepsDirty = true; readBattery(); }
+  batLogTick();
+  // steps and clock, every 2 seconds, screen on or off; the battery every 2 s with the screen on, 10 s otherwise
+  static uint32_t batAt = 0;
+  if (now - stepsAt > 2000) { stepsAt = now; if (updateSteps()) stepsDirty = true; }
+  if (now - batAt > (screenOn && !appIsAmbient() ? 2000u : 10000u)) { batAt = now; readBattery(); }
 
   // PWR: from the normal screen to the always-on screen (or off, if that is disabled in Settings);
   // from the always-on screen or off, back to the normal screen
@@ -601,7 +665,7 @@ void loop() {
     // touch is ignored here; only the buttons (BOOT or PWR) bring the normal screen back
     if (boot) { lastActivity = now; setAmbient(false); return; }
     if (now - ambientDrawnAt > 30000) { ambientDrawnAt = now; redraw(); }
-    nap(500, true);
+    nap(1000, true);
     return;
   }
 

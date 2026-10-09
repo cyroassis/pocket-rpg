@@ -9,6 +9,7 @@ void platformSaveSettings(const Settings&){}
 void platformSaveGame(const Game& g){ fprintf(stderr,"save game: xp %u mats %u finds %u bag %d\n",g.xp,g.mats,g.finds,bagCount(g)); }
 void platformApplyBrightness(uint8_t){}
 void platformRadio(bool){}
+int platformBatteryLog(BatSample*, int){ return 0; }
 void platformUpdate(int){}
 void platformRadioSend(const uint8_t*, const uint8_t*, int){}
 uint32_t platformRandom(uint32_t n){ return rand()%n; }

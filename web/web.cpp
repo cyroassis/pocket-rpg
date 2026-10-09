@@ -23,6 +23,15 @@ void platformApplyBrightness(uint8_t level) { js_brightness(level); }
 uint32_t platformRandom(uint32_t n) { return js_random(n); }
 void platformRadio(bool on) { js_radio(on); }
 void platformRadioSend(const uint8_t* mac, const uint8_t* data, int len) { js_radio_send(mac, data, len); }
+int platformBatteryLog(BatSample* out, int max) {   // a made-up night, to show the screen
+  int n = 0; float pct = 96;
+  for (int i = 0; i < 90 && n < max; i++) {
+    uint8_t m = i < 6 ? BM_ON : i < 54 ? BM_AOD : BM_OFF;
+    pct -= m == BM_ON ? 2.2f : m == BM_AOD ? 0.9f : 0.15f;
+    out[n++] = { (uint16_t)(pct * 10), m, (uint8_t)(m == BM_ON ? 0 : 96) };
+  }
+  return n;
+}
 void platformUpdate(int action) {   // no WiFi here: the page only shows the screen
   if (action == UA_CHECK || action == UA_INSTALL) appUpdateStatus(U_LATEST, "Board only", "Updates run on the real board", -1);
   else if (action == UA_SETUP) appUpdateStatus(U_SETUP, "PocketRPG-AB12", "", -1);
@@ -31,7 +40,7 @@ void platformUpdate(int action) {   // no WiFi here: the page only shows the scr
 static uint16_t* fb;
 static float* work;
 static Hero heroBuf;
-static Settings settingsBuf = { 1, 1, 1, 0 };
+static Settings settingsBuf = { 0, 1, 1, 0 };
 static Game gameBuf;
 
 EXPORT(web_hero_buf) void* web_hero_buf() { return &heroBuf; }

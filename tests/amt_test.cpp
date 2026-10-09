@@ -6,6 +6,7 @@
 void platformSaveHero(const Hero&){} void platformEraseHero(){} void platformSaveSettings(const Settings&){}
 void platformSaveGame(const Game&){} void platformApplyBrightness(uint8_t){} void platformRadio(bool){}
 void platformRadioSend(const uint8_t*, const uint8_t*, int){} uint32_t platformRandom(uint32_t n){ return rand()%n; }
+int platformBatteryLog(BatSample*, int){ return 0; }
 void platformUpdate(int){}
 static uint16_t fb[SCREEN_W*SCREEN_H];
 static void dump(const char* n){ FILE* f=fopen(n,"wb"); fprintf(f,"P6\n%d %d\n255\n",SCREEN_W,SCREEN_H);

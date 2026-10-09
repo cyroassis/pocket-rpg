@@ -20,7 +20,7 @@ static const char* const STEP_TITLES[STEP_COUNT] = { "BOY OR GIRL?", "SKIN TONE"
 static const bool STEP_HEAD[STEP_COUNT] = { false, false, true, true, true, false, false };
 
 enum Screen { WELCOME, STEP, READY, HOME, CRAFT, EXPLORE, BAG, GEAR, TRADE };
-enum Overlay { NONE, SETTINGS, RESET, ITEM, TOUCHTEST, UPDATE };
+enum Overlay { NONE, SETTINGS, RESET, ITEM, TOUCHTEST, UPDATE, BATTERY };
 
 // preview area and the two camera views (source rectangles in the 368x448 character)
 static const float PV_Y = 60, PV_H = 218;
@@ -41,7 +41,7 @@ static bool shownAtPending = false;
 static Look rendered;
 static bool haveRender = false;
 static uint32_t renderedGen = 0;
-static Settings settings = { 1, 1, 1, 0 };
+static Settings settings = { 0, 1, 1, 0 };   // always-on off by default (it costs battery)
 static uint32_t stepsToday = 0, curDay = 0;
 static Game game;
 static bool clockValid = false;
@@ -1197,6 +1197,56 @@ void appUpdateStatus(int state, const char* line1, const char* line2, int progre
 }
 bool appUpdateOpen() { return overlay == UPDATE; }
 
+// ---------------------------------------------------------------- battery log (Settings, page 1)
+// The level over the last hours, coloured by what the screen was doing, and how fast it drops in each mode.
+static void actBattery(int) { overlay = BATTERY; }
+static void actBatteryBack(int) { overlay = SETTINGS; settingsPage = 0; }
+static const Rgb BM_COL[5] = { C_GOLD, 0xB4ABD2, 0x5A5378, 0x7BD88F, C_DANGER };
+static void drawBatteryLog() {
+  drawBackground(fb);
+  text(FONT_PX24, "BATTERY", 14, 46, C_INK, LEFT);
+  drawBattery(354, 46);
+  static BatSample log[160];
+  int n = platformBatteryLog(log, 160);
+  // chart: the last 16 hours (96 samples), one column per sample
+  const int cx0 = 14, cy0 = 66, cw = 340, ch = 120, N = 96;
+  roundBox(cx0 - 4, cy0 - 6, cw + 8, ch + 12, 10, C_PANEL, 1, C_LINE, 2);
+  int first = n > N ? n - N : 0;
+  float colW = (float)cw / N;
+  for (int i = first; i < n; i++) {
+    const BatSample& b = log[i];
+    float x = cx0 + (i - first) * colW, h = ch * (b.pct10 > 1000 ? 1000 : b.pct10) / 1000.f;
+    if (b.mode == BM_RESTART) { fillRect((int)x, cy0, 1, ch, C_DANGER, 0.5f); continue; }
+    fillRect((int)x, (int)(cy0 + ch - h), (int)(colW + 0.99f), (int)h, BM_COL[b.mode < 5 ? b.mode : 0], 0.9f);
+  }
+  if (n < 2) text(FONT_PX16, "Measuring... (every 10 min)", SCREEN_W / 2, cy0 + ch / 2 + 6, C_MUTED);
+  text(FONT_PX16, "16 h ago", cx0, cy0 + ch + 22, C_DIM, LEFT);
+  text(FONT_PX16, "now", cx0 + cw, cy0 + ch + 22, C_DIM, RIGHT);
+  // drop per hour in each mode, from every 10-minute step spent in that mode
+  static const char* const NAMES[3] = { "Screen on", "Always-on", "Screen off" };
+  float drop[3] = { 0, 0, 0 }; int steps[3] = { 0, 0, 0 }; long sleep[3] = { 0, 0, 0 };
+  for (int i = 1; i < n; i++) {
+    int m = log[i].mode;
+    if (m > BM_OFF || log[i - 1].mode == BM_CHARGING || log[i - 1].mode == BM_RESTART) continue;
+    drop[m] += (log[i - 1].pct10 - (float)log[i].pct10) / 10.f; steps[m]++; sleep[m] += log[i].sleepPct;
+  }
+  char t[48];
+  for (int m = 0; m < 3; m++) {
+    float y = 228 + m * 40;
+    disc(24, y - 6, 6, BM_COL[m]);
+    text(FONT_PX16, NAMES[m], 38, (int)y, C_INK, LEFT);
+    if (steps[m] < 2) { text(FONT_PX16, "no data yet", 354, (int)y, C_DIM, RIGHT); continue; }
+    float perH = drop[m] / (steps[m] * BAT_LOG_MINUTES / 60.f);
+    if (perH < 0) perH = 0;
+    if (perH > 0.05f) snprintf(t, sizeof t, "-%.1f%%/h (%dh)", perH, (int)(100 / perH));
+    else snprintf(t, sizeof t, "-0%%/h");
+    text(FONT_PXB16, t, 354, (int)y, C_GOLD, RIGHT);
+    snprintf(t, sizeof t, "asleep %ld%% of the time", sleep[m] / steps[m]);
+    text(FONT_PX16, t, 38, (int)y + 18, C_MUTED, LEFT);
+  }
+  button(10, NAV_Y, 348, NAV_H, "Back", GHOST, actBatteryBack);
+}
+
 // Two pages: screen options first; orientation and Start over on the second
 static void drawSettings() {
   drawBackground(fb);
@@ -1208,6 +1258,7 @@ static void drawSettings() {
     char t[8]; snprintf(t, sizeof t, "%u s", TIMEOUT_SECONDS[settings.timeout]);
     settingRow(142, "Timeout", "Before it dims", t, -1, actTimeout);
     settingRow(212, "Brightness", nullptr, BRIGHTNESS_NAMES[settings.brightness], -1, actBrightness);
+    settingRow(282, "Battery", "Use per hour", nullptr, -1, actBattery);
     button(10, NAV_Y, 120, NAV_H, "More", GHOST, actSettingsPage, 1);
   } else {
     settingRow(72, "Upside down", "Turn the screen", nullptr, settings.upsideDown, actUpsideDown);
@@ -1262,7 +1313,7 @@ void appBegin(uint16_t* f, float* w, const Hero* saved, const Settings& s, const
 }
 
 bool appSwipe(int dir) {
-  if (ambient || !swipeFn || overlay == ITEM || overlay == RESET || overlay == TOUCHTEST || overlay == UPDATE) return false;
+  if (ambient || !swipeFn || overlay == ITEM || overlay == RESET || overlay == TOUCHTEST || overlay == UPDATE || overlay == BATTERY) return false;
   swipeFn(dir > 0 ? 1 : -1);
   return true;
 }
@@ -1308,6 +1359,7 @@ void appDraw(uint32_t now) {
   if (overlay == SETTINGS) { drawSettings(); return; }
   if (overlay == TOUCHTEST) { drawTouchTest(); return; }
   if (overlay == UPDATE) { drawUpdate(); return; }
+  if (overlay == BATTERY) { drawBatteryLog(); return; }
   switch (screen) {
     case WELCOME: drawWelcome(); break;
     case STEP: drawStep(now); break;
@@ -1326,6 +1378,7 @@ void appDraw(uint32_t now) {
 void appSettingsButton() {
   if (overlay == TOUCHTEST) { overlay = SETTINGS; settingsPage = 1; return; }   // back to the page it came from
   if (overlay == UPDATE) { if (!updBusy()) actUpdBack(0); return; }
+  if (overlay == BATTERY) { actBatteryBack(0); return; }
   overlay = overlay == SETTINGS || overlay == RESET ? NONE : SETTINGS; settingsPage = 0;
 }
 const Settings& appSettings() { return settings; }
