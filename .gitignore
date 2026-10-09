@@ -5,3 +5,4 @@ tests/*.png
 tests/a.out
 __pycache__/
 tools/ui_preview.png
+tools/ui_preview_craft.png

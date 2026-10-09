@@ -1,18 +1,18 @@
 # Pocket RPG
 
 An endless pocket RPG for the **Waveshare ESP32-S3-Touch-AMOLED-1.8** (368×448 AMOLED, touch, step sensor).
-Walk to find materials and XP, craft weapons, armor and capes, level up, and trade gear with a friend's board.
+Walk to find shards and XP, craft weapons, armor and capes, level up, and trade gear with a friend's board.
 
 **Try it in the browser:** [cyroassis.github.io/pocket-rpg](https://cyroassis.github.io/pocket-rpg/). It runs the same game code as the board (compiled to WebAssembly), and can show two boards side by side to try trading.
 
 ## The game
 
 - **Hero:** boy or girl, skin, eyes, hair, hair color, a profession (Blacksmith: weapons, Armorer: armor, Tailor: capes) and a name.
-- **Walking:** every 200 steps gives 5 XP (no limit) and 1 material (up to 20 a day). About 1 find in 50 is an item instead.
-- **Craft:** 5 to 50 materials, in steps of 5. Every 5 materials is one roll for rarity, and the best roll wins. 2 XP per 5 materials.
+- **Walking:** every 200 steps gives 5 XP (no limit) and 1 shard (up to 20 a day). About 1 find in 50 is an item instead.
+- **Craft:** 5 to 50 shards, in steps of 5. Every 5 shards is one roll for rarity, and the best roll wins. 2 XP per 5 shards.
 - **Rarity:** 20 tiers, each one 1.6× rarer than the one before.
 - **Levels:** 100, 125, 150, 200, 250, 325, 400, 500, 650, 800 XP, then the same steps ×10 every 10 levels, forever. You can equip an item when your level is at least its tier.
-- **Gear:** weapon (sword, axe or mace), armor and cape. The bag holds 20 items, and salvage gives materials back.
+- **Gear:** weapon (sword, axe or mace), armor and cape. The bag holds 20 items, and salvage gives shards back.
 - **Trade:** two boards close together. Each side offers up to 3 items and approves. Any change clears both approvals, and when both approve, the items swap.
 
 ## Folders

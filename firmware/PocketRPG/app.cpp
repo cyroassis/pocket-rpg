@@ -422,6 +422,18 @@ static const float HERO_SHIFT = 62;   // hero moved right to free a column on th
 // Home: the hero, the name panel (top left), level and XP (top right), the three actions down the left side
 // and pop-ups at the bottom right. Art from art/ui/ (tools/build_ui.py); text drawn here.
 static const Rgb C_LAVENDER = 0xB4ABD2, C_OUTLINE = 0x120C1A;
+// shard (the crafting material): a small crystal, until its art arrives
+static void shardIcon(float cx, float cy, float k) {
+  const float pts[] = { 0, -14, 9, -4, 6, 12, -6, 12, -9, -4 };
+  float p[10]; for (int i = 0; i < 5; i++) { p[i * 2] = cx + pts[i * 2] * k; p[i * 2 + 1] = cy + pts[i * 2 + 1] * k; }
+  polygon(p, 5, 0x6FD3F2);
+  const float hi[] = { 0, -14, 9, -4, 0, -1 };
+  float h[6]; for (int i = 0; i < 3; i++) { h[i * 2] = cx + hi[i * 2] * k; h[i * 2 + 1] = cy + hi[i * 2 + 1] * k; }
+  polygon(h, 3, 0xC9F4FF);
+  const float sh[] = { 0, -1, 6, 12, -6, 12 };
+  float d[6]; for (int i = 0; i < 3; i++) { d[i * 2] = cx + sh[i * 2] * k; d[i * 2 + 1] = cy + sh[i * 2 + 1] * k; }
+  polygon(d, 3, 0x2F86B8);
+}
 static void drawHome() {
   drawBackgroundAt(fb, SCREEN_W / 2 + HERO_SHIFT);
   ensureCharacter(true);
@@ -497,7 +509,7 @@ static void drawExplore() {
   text(FONT_PX24, t, 342, 98, C_GOLD, RIGHT);
   roundBox(26, 114, 316, 20, 10, C_PANEL2, 1);
   if (into) roundBox(26, 114, 20 + 296.f * into / STEPS_PER_FIND, 20, 10, C_GOLD, 1);
-  text(FONT_PX16, done ? "Materials done for today" : "+1 material \xC2\xB7 +5 XP", SCREEN_W / 2, 166, C_MUTED);
+  text(FONT_PX16, done ? "Shards done for today" : "+1 shard \xC2\xB7 +5 XP", SCREEN_W / 2, 166, C_MUTED);
   // today
   roundBox(10, 194, 169, 92, 14, C_PANEL, 1, C_LINE, 2);
   roundBox(189, 194, 169, 92, 14, C_PANEL, 1, C_LINE, 2);
@@ -511,8 +523,8 @@ static void drawExplore() {
   if (recentCount) {
     const FindEvent& e = recent[recentCount - 1];
     if (e.kind == F_ITEM) { char nm[28]; itemName(e.item, nm, sizeof nm); snprintf(t, sizeof t, "Found: %s", nm); text(FONT_PX16, t, SCREEN_W / 2, 320, rarityRgb(e.item.tier)); }
-    else text(FONT_PX16, e.kind == F_MATERIAL ? "Last find: +1 material" : "Last: +5 XP", SCREEN_W / 2, 320, C_MUTED);
-  } else text(FONT_PX16, "Walk to find materials", SCREEN_W / 2, 320, C_MUTED);
+    else text(FONT_PX16, e.kind == F_MATERIAL ? "Last find: +1 shard" : "Last: +5 XP", SCREEN_W / 2, 320, C_MUTED);
+  } else text(FONT_PX16, "Walk to find shards", SCREEN_W / 2, 320, C_MUTED);
   char tot[16]; fmtThousands(totalSteps(game), tot);
   snprintf(t, sizeof t, "Total steps %s", tot);
   text(FONT_PX16, t, SCREEN_W / 2, 348, C_MUTED);
@@ -572,34 +584,50 @@ static void drawCraft(uint32_t now) {
     else button(140, NAV_Y, 218, NAV_H, "Bag", GHOST, actCraftToBag);
     return;
   }
-  titleBar("CRAFT");
-  text(FONT_PX16, PROFESSION_MAKES[craftType()], 14, 74, C_MUTED, LEFT);
-  disc(184, 136, 46, C_PANEL2, 1); ring(184, 136, 46, 2, C_LINE);
-  icon(iconFor(craftType(), craftKind), 184, 136, C_GOLD, C_PANEL2, 0.9f);
-  if (craftType() == IT_WEAPON && weaponKindCount() > 1) {   // which weapon: arrows beside the picture
+  // the picker: art from art/ui/craft.png (tools/build_ui.py), with the changing parts drawn here
+  uiDraw(UI_CRAFT_BG, 0, 0);
+  char t[40];
+  snprintf(t, sizeof t, "%s", PROFESSION_MAKES[craftType()]); for (char* q = t; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
+  text(FONT_PXB16, t, 32, 94, C_LAVENDER, LEFT);
+  // top right: the shards you have (and the weapon kind)
+  char have[16]; fmtThousands(game.mats, have);
+  shardIcon(284, 42, 1.0f);
+  text(FONT_PXB24, have, 352, 54, C_GOLD, RIGHT);
+  if (craftType() == IT_WEAPON) {
     char up[16]; strncpy(up, weaponKindName(craftKind), 15); up[15] = 0; for (char* q = up; *q; q++) if (*q >= 'a' && *q <= 'z') *q -= 32;
-    text(FONT_PXB16, up, 354, 74, C_GOLD, RIGHT);
-    chevron(112, 136, -1, C_INK); chevron(256, 136, 1, C_INK);
-    hit(60, 86, 124, 104, actKind, -1); hit(184, 86, 124, 104, actKind, 1);
+    text(FONT_PXB16, up, 352, 90, C_GOLD, RIGHT);
   }
-  // how many materials go in: arrows on both sides, the whole half of the box works as the arrow
+  // the item, in the round frame
+  Item show = { (uint8_t)craftType(), 1, (uint8_t)(1 | (craftType() == IT_WEAPON ? craftKind : 0) << 4) };
+  itemIcon(show, UI_CRAFT_CX, UI_CRAFT_CY, UI_CRAFT_R * 1.75f, C_PANEL, false);
+  if (craftType() == IT_WEAPON && weaponKindCount() > 1) {   // which weapon: arrows beside the picture
+    uiDraw(UI_CRAFT_ARROW_L, uiX(UI_CRAFT_ARROW_L), uiY(UI_CRAFT_ARROW_L));
+    uiDraw(UI_CRAFT_ARROW_R, uiX(UI_CRAFT_ARROW_R), uiY(UI_CRAFT_ARROW_R));
+    hit(40, 104, 144, 108, actKind, -1); hit(184, 104, 144, 108, actKind, 1);
+    swipeFn = actKind;
+  }
+  // how many shards go in: the whole half of the panel works as the arrow
   fitAmount();
-  roundBox(10, 196, 348, 100, 14, C_PANEL, 1, C_LINE, 2);
-  chevron(44, 246, -1, C_INK); chevron(324, 246, 1, C_INK);
-  char t[32]; snprintf(t, sizeof t, "%d", craftAmount);
-  text(FONT_PXB48, t, SCREEN_W / 2, 262, C_GOLD);
-  text(FONT_PX16, "materials", SCREEN_W / 2, 286, C_MUTED);
-  hit(10, 196, 174, 100, actAmount, -1); hit(184, 196, 174, 100, actAmount, 1);
+  snprintf(t, sizeof t, "%d", craftAmount);
+  text(FONT_PXB48, t, SCREEN_W / 2, 276, C_GOLD);
+  text(FONT_PXB16, "SHARDS", SCREEN_W / 2, 296, C_LAVENDER);
+  hit(14, 214, 170, 96, actAmount, -1); hit(184, 214, 170, 96, actAmount, 1);
   bool full = bagFreeSlot(game) < 0, poor = game.mats < CRAFT_MIN;
-  if (poor) text(FONT_PX16, "Walk to find materials", SCREEN_W / 2, 326, C_DANGER);
-  else if (full) text(FONT_PX16, "Your bag is full", SCREEN_W / 2, 326, C_DANGER);
+  if (poor) text(FONT_PXB16, "WALK TO FIND SHARDS", SCREEN_W / 2, 336, C_DANGER);
+  else if (full) text(FONT_PXB16, "YOUR BAG IS FULL", SCREEN_W / 2, 336, C_DANGER);
   else {
     int r = craftRolls(craftAmount);
-    snprintf(t, sizeof t, "LUCK x%d \xC2\xB7 +%d XP", r, r * XP_PER_ROLL);
-    text(FONT_PX16, t, SCREEN_W / 2, 326, C_INK);
+    snprintf(t, sizeof t, "LUCK X%d", r);
+    char x2[16]; snprintf(x2, sizeof x2, "%d XP", r * XP_PER_ROLL);
+    int w1 = textWidth(FONT_PXB16, t), w2 = textWidth(FONT_PXB16, x2), gap = 26, x0 = (SCREEN_W - (w1 + gap + w2)) / 2;
+    text(FONT_PXB16, t, x0, 336, C_INK, LEFT);
+    text(FONT_PXB16, "+", x0 + w1 + gap / 2, 336, C_GOLD);
+    text(FONT_PXB16, x2, x0 + w1 + gap, 336, C_INK, LEFT);
   }
-  button(10, NAV_Y, 120, NAV_H, "Back", GHOST, actGo, HOME);
-  button(140, NAV_Y, 218, NAV_H, "Craft", poor || full ? DISABLED : PRIMARY, actCraft);
+  // buttons (their frames are in the background)
+  text(FONT_PXB24, "BACK", 87, 388, C_INK); hit(16, 346, 143, 66, actGo, HOME);
+  if (poor || full) { fillRect(166, 346, 187, 66, 0x000000, 0.6f); text(FONT_PXB24, "CRAFT", 259, 388, 0x5A4A20); }
+  else { text(FONT_PXB24, "CRAFT", 259, 388, C_GOLD_INK); hit(166, 346, 187, 66, actCraft); }
 }
 
 // ---------------------------------------------------------------- bag: 20 slots on two pages
@@ -709,7 +737,7 @@ static void drawItemCard() {
   else if (ok) text(FONT_PX16, "Fits your level", SCREEN_W / 2, 252, C_MUTED);
   else { snprintf(st, sizeof st, "Needs level %d", it.tier); text(FONT_PX16, st, SCREEN_W / 2, 252, C_DANGER); }
   if (itemFrom == FROM_TRADE) { button(10, NAV_Y, 348, NAV_H, "Back", GHOST, actItemBack); return; }   // the other hero's item: look only
-  if (!itemIsGear) { snprintf(st, sizeof st, "Salvage: +%d materials", salvageValue(it)); text(FONT_PX16, st, SCREEN_W / 2, 300, C_MUTED); }
+  if (!itemIsGear) { snprintf(st, sizeof st, "Salvage: +%d shards", salvageValue(it)); text(FONT_PX16, st, SCREEN_W / 2, 300, C_MUTED); }
   else if (bagFreeSlot(game) < 0) text(FONT_PX16, "Bag full: no room to take off", SCREEN_W / 2, 300, C_DANGER);
   if (itemIsGear) {
     button(10, NAV_Y, 120, NAV_H, "Back", GHOST, actItemBack);
