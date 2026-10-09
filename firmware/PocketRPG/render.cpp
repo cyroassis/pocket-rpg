@@ -206,7 +206,7 @@ static void drawLayer(const LayerDef& L, int handCut, bool hideHand, int hideTop
         int y = k / SCREEN_W, x = k % SCREEN_W;
         if (y >= hideTop && y <= hideBottom) {
           // the body's own hand (its outline, row by row), and above it the wrist inside the fist's columns
-          if (maskRows && maskRows[y * 2] >= 0) { if (x >= maskRows[y * 2] - 1 && x <= maskRows[y * 2 + 1] + 1) continue; }
+          if (maskRows && maskRows[y * 2] >= 0) { if (x >= maskRows[y * 2] - 3 && x <= maskRows[y * 2 + 1] + 3) continue; }
           else if (maskRows && y < handMaskTop && x >= hx0 && x <= hx1) continue;
         }
       }
@@ -354,7 +354,7 @@ void renderCharacterLayers(const Look& look, float* work) {
   // body (eyes = group A, underwear = group B)
   gradLUT(EYE_RGB[look.eye % 9], body.mid3, paint.a);
   gradLUT(0xA8A8A8, body.mid4, paint.b);
-  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr && !fist, hideTop, hx0, hx1, true, body.handRows);   // only the skin of the hand
+  if (!look.noBody) drawLayer(body, handCut, weapon != nullptr && !fist, hideTop, hx0, hx1, false, body.handRows);   // the hand and its outline
   // armor
   if (armor) {
     const TierColor& tc = ARMOR_TIERS[look.armorTier - 1];
